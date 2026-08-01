@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Market.CSGO 24/7 Auto-Seller & Repricer Bot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">
+          <i class="fa-solid fa-robot"></i>
+        </div>
+        <div class="brand-text">
+          <span class="title">CS2 MARKET</span>
+          <span class="subtitle">24/7 AUTO-SELLER</span>
+        </div>
+      </div>
+
+      <div class="bot-toggle-card">
+        <div class="bot-status-header">
+          <span>BOT STATUS</span>
+          <span class="status-badge" id="botStatusBadge">STOPPED</span>
+        </div>
+        <div class="bot-status-desc" id="botStatusDesc">Daemon is paused. Click to activate 24/7 trading.</div>
+        <button class="btn btn-primary btn-block mt-3" id="toggleBotBtn">
+          <i class="fa-solid fa-play"></i> Launch 24/7 Bot
+        </button>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="dashboard">
+          <i class="fa-solid fa-chart-line"></i> Dashboard
+        </button>
+        <button class="nav-item" data-tab="sales">
+          <i class="fa-solid fa-tags"></i> Active Sales <span class="badge" id="navSalesCount">0</span>
+        </button>
+        <button class="nav-item" data-tab="inventory">
+          <i class="fa-solid fa-boxes-stacked"></i> Steam Inventory
+        </button>
+        <button class="nav-item" data-tab="rules">
+          <i class="fa-solid fa-sliders"></i> Pricing Rules & Floor
+        </button>
+        <button class="nav-item" data-tab="logs">
+          <i class="fa-solid fa-terminal"></i> Activity Log & P2P
+        </button>
+        <button class="nav-item" data-tab="settings">
+          <i class="fa-solid fa-gear"></i> API & Bot Settings
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="rate-limit-info">
+          <i class="fa-solid fa-shield-halved"></i> Max 4 Req/sec (Safe Rate)
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Navbar Header -->
+      <header class="header">
+        <div class="header-title">
+          <h1 id="pageTitle">Dashboard</h1>
+          <p id="pageSubtitle">Real-time overview of Market.CSGO bot operations & balance</p>
+        </div>
+
+        <div class="header-actions">
+          <button class="btn btn-secondary" id="repriceNowBtn">
+            <i class="fa-solid fa-rotate"></i> Reprice Now
+          </button>
+          <div class="balance-card">
+            <i class="fa-solid fa-wallet text-accent"></i>
+            <div class="balance-details">
+              <span class="label">Account Balance</span>
+              <span class="amount" id="userBalanceText">$0.00 / 0 ₽</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- TAB 1: DASHBOARD OVERVIEW -->
+      <section class="tab-content active" id="tab-dashboard">
+        <!-- Metrics Stats Grid -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon icon-cyan">
+              <i class="fa-solid fa-store"></i>
+            </div>
+            <div class="stat-info">
+              <span class="stat-label">Active Listings</span>
+              <span class="stat-value" id="statActiveListings">0</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon icon-emerald">
+              <i class="fa-solid fa-heartbeat"></i>
+            </div>
+            <div class="stat-info">
+              <span class="stat-label">24/7 Heartbeat Pings</span>
+              <span class="stat-value" id="statPingCount">0</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon icon-orange">
+              <i class="fa-solid fa-bolt"></i>
+            </div>
+            <div class="stat-info">
+              <span class="stat-label">Auto-Reprices Executed</span>
+              <span class="stat-value" id="statRepriceCount">0</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon icon-purple">
+              <i class="fa-solid fa-network-wired"></i>
+            </div>
+            <div class="stat-info">
+              <span class="stat-label">P2P Trade Status</span>
+              <span class="stat-value" id="statP2PStatus">Online</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dashboard Panels -->
+        <div class="panel-grid mt-4">
+          <!-- Active Quick Control Panel -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <h3><i class="fa-solid fa-sliders text-accent"></i> Live Trading Strategy Summary</h3>
+            </div>
+            <div class="panel-body">
+              <div class="info-list">
+                <div class="info-row">
+                  <span>Target Currency</span>
+                  <strong id="summaryCurrency">USD ($)</strong>
+                </div>
+                <div class="info-row">
+                  <span>Undercut Strategy</span>
+                  <strong id="summaryUndercut">- $0.01 (Undercut lowest competitor)</strong>
+                </div>
+                <div class="info-row">
+                  <span>Default Min Price Floor</span>
+                  <strong id="summaryMinFloor">$0.05</strong>
+                </div>
+                <div class="info-row">
+                  <span>Auto-List New Steam Items</span>
+                  <strong id="summaryAutoList">Disabled</strong>
+                </div>
+                <div class="info-row">
+                  <span>Heartbeat Interval</span>
+                  <strong id="summaryPingInterval">Every 2 minutes</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Actions & Warnings -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <h3><i class="fa-solid fa-bolt text-accent"></i> Quick Controls</h3>
+            </div>
+            <div class="panel-body flex-column gap-3">
+              <button class="btn btn-secondary btn-block text-left" id="btnRefreshData">
+                <i class="fa-solid fa-arrows-rotate"></i> Refresh Market Data & Balance
+              </button>
+              <button class="btn btn-danger-outline btn-block text-left" id="btnDelistAll">
+                <i class="fa-solid fa-trash-can"></i> Bulk Delist All Items from Sale
+              </button>
+              <div class="alert alert-info mt-2">
+                <i class="fa-solid fa-circle-info"></i> <strong>24/7 Mode:</strong> Keep this app running or host on a server. The bot sends continuous keep-alive heartbeats to keep your market inventory active.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Logs Feed -->
+        <div class="panel-card mt-4">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-list-ul text-accent"></i> Live Activity Feed</h3>
+          </div>
+          <div class="panel-body p-0">
+            <div class="log-stream" id="recentLogStream">
+              <div class="empty-state">No logs recorded yet.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: ACTIVE SALES -->
+      <section class="tab-content" id="tab-sales">
+        <div class="panel-card">
+          <div class="panel-header space-between">
+            <h3><i class="fa-solid fa-tags text-accent"></i> Items Listed for Sale on Market.CSGO</h3>
+            <button class="btn btn-sm btn-secondary" id="btnRefreshSales">
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh Listings
+            </button>
+          </div>
+          <div class="panel-body p-0">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Status</th>
+                    <th>Current Price</th>
+                    <th>Min Floor</th>
+                    <th>Market Hash Name</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="salesTableBody">
+                  <tr><td colspan="6" class="text-center p-4">Loading active sales...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: STEAM INVENTORY -->
+      <section class="tab-content" id="tab-inventory">
+        <div class="panel-card">
+          <div class="panel-header space-between">
+            <h3><i class="fa-solid fa-boxes-stacked text-accent"></i> Steam CS2 Inventory (Available to Sell)</h3>
+            <button class="btn btn-sm btn-secondary" id="btnRefreshInventory">
+              <i class="fa-solid fa-arrows-rotate"></i> Load Steam Inventory
+            </button>
+          </div>
+          <div class="panel-body">
+            <div class="inventory-grid" id="inventoryGrid">
+              <div class="empty-state">Click "Load Steam Inventory" to fetch items ready for listing.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: PRICING RULES & MIN PRICE FLOOR -->
+      <section class="tab-content" id="tab-rules">
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-shield-cat text-accent"></i> Auto-Repricing & Safety Floor Rules</h3>
+          </div>
+          <div class="panel-body">
+            <form id="rulesForm">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Undercut Step Amount ($ USD / Currency)</label>
+                  <input type="number" step="0.01" id="inputUndercut" class="form-control" placeholder="0.01">
+                  <small>Amount to undercut lowest market competitor by (e.g. 0.01 = $0.01 lower).</small>
+                </div>
+                <div class="form-group">
+                  <label>Default Minimum Price Safety Floor ($ USD)</label>
+                  <input type="number" step="0.01" id="inputDefaultMin" class="form-control" placeholder="0.05">
+                  <small>The bot will NEVER list or reprice an item below this price.</small>
+                </div>
+              </div>
+
+              <div class="form-group mt-3">
+                <label>Auto-List New Items from Inventory</label>
+                <div class="toggle-switch-wrapper">
+                  <input type="checkbox" id="checkAutoList" class="toggle-switch-input">
+                  <label for="checkAutoList" class="toggle-switch-label"></label>
+                  <span>Automatically list tradable Steam items when detected</span>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary mt-3">
+                <i class="fa-solid fa-floppy-disk"></i> Save Repricing Rules
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: ACTIVITY LOGS & P2P TRADES -->
+      <section class="tab-content" id="tab-logs">
+        <div class="panel-card">
+          <div class="panel-header space-between">
+            <h3><i class="fa-solid fa-handshake-simple text-accent"></i> Pending P2P Trade Offers (Sold Items)</h3>
+            <button class="btn btn-sm btn-secondary" id="btnRefreshP2P">
+              <i class="fa-solid fa-arrows-rotate"></i> Check Trades
+            </button>
+          </div>
+          <div class="panel-body">
+            <div id="p2pTradesList">
+              <div class="empty-state">No pending P2P trade requests requiring action right now.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-card mt-4">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-list-check text-accent"></i> System Event Logs</h3>
+          </div>
+          <div class="panel-body p-0">
+            <div class="log-stream full-log-stream" id="fullLogStream">
+              <div class="empty-state">No logs available.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 6: SETTINGS -->
+      <section class="tab-content" id="tab-settings">
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-key text-accent"></i> Market.CSGO API Key & Configuration</h3>
+          </div>
+          <div class="panel-body">
+            <form id="settingsForm">
+              <div class="form-group">
+                <label>Market.CSGO Secret API Key</label>
+                <div class="input-with-icon">
+                  <i class="fa-solid fa-key"></i>
+                  <input type="password" id="inputApiKey" class="form-control" placeholder="Enter your secret API key from market.csgo.com/en/settings">
+                </div>
+                <small>Find or generate your API key at: <code>https://market.csgo.com/en/settings</code></small>
+              </div>
+
+              <div class="form-row mt-3">
+                <div class="form-group">
+                  <label>Base Currency</label>
+                  <select id="selectCurrency" class="form-control">
+                    <option value="USD">USD ($)</option>
+                    <option value="RUB">RUB (₽)</option>
+                    <option value="EUR">EUR (€)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Heartbeat Ping Interval (seconds)</label>
+                  <input type="number" id="inputPingInterval" class="form-control" value="120">
+                  <small>Recommended: 120 seconds (2 minutes).</small>
+                </div>
+                <div class="form-group">
+                  <label>Reprice Scan Interval (seconds)</label>
+                  <input type="number" id="inputRepriceInterval" class="form-control" value="180">
+                  <small>Recommended: 180 seconds (3 minutes).</small>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary mt-4">
+                <i class="fa-solid fa-check"></i> Save API Settings
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
