@@ -1,11 +1,13 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // DOM Elements
+  // Navigation & Tabs
   const navItems = document.querySelectorAll('.nav-item');
   const tabContents = document.querySelectorAll('.tab-content');
   const pageTitle = document.getElementById('pageTitle');
   const pageSubtitle = document.getElementById('pageSubtitle');
   
+  // Header & Status Elements
   const botStatusBadge = document.getElementById('botStatusBadge');
+  const statusText = document.getElementById('statusText');
   const botStatusDesc = document.getElementById('botStatusDesc');
   const toggleBotBtn = document.getElementById('toggleBotBtn');
   const repriceNowBtn = document.getElementById('repriceNowBtn');
@@ -19,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const navSalesCount = document.getElementById('navSalesCount');
   const recentLogStream = document.getElementById('recentLogStream');
   
-  // Settings & Rules Forms
+  // Forms & Inputs
   const settingsForm = document.getElementById('settingsForm');
   const rulesForm = document.getElementById('rulesForm');
   const inputApiKey = document.getElementById('inputApiKey');
@@ -31,33 +33,52 @@ document.addEventListener('DOMContentLoaded', () => {
   const inputDefaultMin = document.getElementById('inputDefaultMin');
   const checkAutoList = document.getElementById('checkAutoList');
   
-  // Buttons
+  // Search Inputs
+  const salesSearchInput = document.getElementById('salesSearchInput');
+  const inventorySearchInput = document.getElementById('inventorySearchInput');
+
+  // Modal Elements
+  const priceModalOverlay = document.getElementById('priceModalOverlay');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalItemName = document.getElementById('modalItemName');
+  const modalPriceInput = document.getElementById('modalPriceInput');
+  const modalSaveBtn = document.getElementById('modalSaveBtn');
+  const modalCancelBtn = document.getElementById('modalCancelBtn');
+  const modalCloseBtn = document.getElementById('modalCloseBtn');
+
+  // Action Buttons
   const btnRefreshData = document.getElementById('btnRefreshData');
   const btnDelistAll = document.getElementById('btnDelistAll');
   const btnRefreshSales = document.getElementById('btnRefreshSales');
   const btnRefreshInventory = document.getElementById('btnRefreshInventory');
   const btnRefreshP2P = document.getElementById('btnRefreshP2P');
 
-  // Tables & Grids
+  // Tables & Feeds
   const salesTableBody = document.getElementById('salesTableBody');
   const inventoryGrid = document.getElementById('inventoryGrid');
   const p2pTradesList = document.getElementById('p2pTradesList');
   const fullLogStream = document.getElementById('fullLogStream');
 
   let currentStatus = null;
+  let rawSalesItems = [];
+  let rawInventoryItems = [];
+  let activeModalCallback = null;
 
-  // 1. Tab Navigation Handler
+  // 1. Tab Navigation
   navItems.forEach(item => {
     item.addEventListener('click', () => {
       const tab = item.getAttribute('data-tab');
-      navItems.forEach(n => n.classList.remove('active'));
+      navItems.forEach(n => {
+        n.classList.remove('active');
+        n.setAttribute('aria-selected', 'false');
+      });
       tabContents.forEach(c => c.classList.remove('active'));
       
       item.classList.add('active');
+      item.setAttribute('aria-selected', 'true');
       const targetTab = document.getElementById(`tab-${tab}`);
       if (targetTab) targetTab.classList.add('active');
 
-      // Update Page Headers
       switch (tab) {
         case 'dashboard':
           pageTitle.textContent = 'Dashboard';
@@ -90,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 2. Fetch Bot Status & Balance
+  // 2. Fetch Bot Status
   async function fetchStatus() {
     try {
       const res = await fetch('/api/status');
@@ -106,16 +127,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 3. Update UI Elements
   function updateUI(data) {
-    // Bot Status Toggle Button & Badge
     if (data.isRunning) {
-      botStatusBadge.textContent = 'RUNNING 24/7';
-      botStatusBadge.classList.add('active');
+      statusText.textContent = 'RUNNING 24/7';
+      botStatusBadge.className = 'status-badge active';
       botStatusDesc.textContent = 'Bot daemon is active and processing 24/7 loops.';
       toggleBotBtn.className = 'btn btn-danger-outline btn-block mt-3';
       toggleBotBtn.innerHTML = '<i class="fa-solid fa-stop"></i> Stop 24/7 Bot';
     } else {
-      botStatusBadge.textContent = 'STOPPED';
-      botStatusBadge.classList.remove('active');
+      statusText.textContent = 'STOPPED';
+      botStatusBadge.className = 'status-badge';
       botStatusDesc.textContent = 'Daemon is paused. Click to activate 24/7 trading.';
       toggleBotBtn.className = 'btn btn-primary btn-block mt-3';
       toggleBotBtn.innerHTML = '<i class="fa-solid fa-play"></i> Launch 24/7 Bot';
@@ -123,27 +143,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Balance
     if (data.balance && data.balance.money !== undefined) {
-      userBalanceText.textContent = `$${(data.balance.money / 100).toFixed(2)} USD / ${data.balance.money} RUB`;
+      userBalanceText.textContent = `$${(data.balance.money / 100).toFixed(2)} USD / ${data.balance.money} ₽`;
     } else if (data.balance && data.balance.balances) {
       userBalanceText.textContent = `$${data.balance.balances.USD || 0} USD`;
     }
 
-    // Stats Counters
+    // Counters
     statActiveListings.textContent = data.stats.activeListingsCount || 0;
     navSalesCount.textContent = data.stats.activeListingsCount || 0;
     statPingCount.textContent = data.stats.pingsCount || 0;
     statRepriceCount.textContent = data.stats.repricesCount || 0;
     statP2PStatus.textContent = data.stats.p2pStatus || 'Online';
 
-    // Summary Card
+    // Summary
     if (data.settings) {
       document.getElementById('summaryCurrency').textContent = data.settings.currency || 'USD';
       document.getElementById('summaryUndercut').textContent = `- $${data.settings.undercutAmount || 0.01} (Undercut lowest competitor)`;
       document.getElementById('summaryMinFloor').textContent = `$${data.settings.defaultMinPriceFloor || 0.05}`;
-      document.getElementById('summaryAutoList').textContent = data.settings.autoListNewItems ? 'Enabled (Auto-List Inventory)' : 'Disabled';
+      document.getElementById('summaryAutoList').textContent = data.settings.autoListNewItems ? 'Enabled' : 'Disabled';
       document.getElementById('summaryPingInterval').textContent = `Every ${(data.settings.pingIntervalSec || 120) / 60} minutes`;
 
-      // Fill settings forms if not focused
       if (document.activeElement !== inputApiKey) inputApiKey.value = data.settings.apiKey || '';
       if (document.activeElement !== selectCurrency) selectCurrency.value = data.settings.currency || 'USD';
       if (document.activeElement !== inputPingInterval) inputPingInterval.value = data.settings.pingIntervalSec || 120;
@@ -154,7 +173,6 @@ document.addEventListener('DOMContentLoaded', () => {
       checkAutoList.checked = !!data.settings.autoListNewItems;
     }
 
-    // Logs Streams
     renderLogs(data.logs || []);
   }
 
@@ -177,7 +195,33 @@ document.addEventListener('DOMContentLoaded', () => {
     fullLogStream.innerHTML = html;
   }
 
-  // 4. Toggle Bot Start/Stop
+  // 4. Modal Dialog Helpers
+  function openPriceModal(title, itemName, initialPrice, onSave) {
+    modalTitle.textContent = title;
+    modalItemName.textContent = itemName;
+    modalPriceInput.value = initialPrice || '';
+    activeModalCallback = onSave;
+    priceModalOverlay.classList.add('active');
+    modalPriceInput.focus();
+  }
+
+  function closePriceModal() {
+    priceModalOverlay.classList.remove('active');
+    activeModalCallback = null;
+  }
+
+  modalSaveBtn.addEventListener('click', () => {
+    const val = parseFloat(modalPriceInput.value);
+    if (!isNaN(val) && activeModalCallback) {
+      activeModalCallback(val);
+    }
+    closePriceModal();
+  });
+
+  modalCancelBtn.addEventListener('click', closePriceModal);
+  modalCloseBtn.addEventListener('click', closePriceModal);
+
+  // 5. Bot Start/Stop
   toggleBotBtn.addEventListener('click', async () => {
     const isRunning = currentStatus && currentStatus.isRunning;
     const endpoint = isRunning ? '/api/bot/stop' : '/api/bot/start';
@@ -185,37 +229,31 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await fetch(endpoint, { method: 'POST' });
       const data = await res.json();
-      if (!data.success) {
-        alert(`Failed: ${data.error}`);
-      }
+      if (!data.success) alert(`Failed: ${data.error}`);
       fetchStatus();
     } catch (e) {
-      alert(`Error toggling bot: ${e.message}`);
+      alert(`Error: ${e.message}`);
     }
   });
 
-  // 5. Reprice Now Button
+  // Reprice Now
   repriceNowBtn.addEventListener('click', async () => {
     repriceNowBtn.disabled = true;
     repriceNowBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Repricing...';
     try {
       const res = await fetch('/api/bot/reprice-now', { method: 'POST' });
       const data = await res.json();
-      if (data.success) {
-        alert('Reprice scan executed successfully!');
-      } else {
-        alert(`Error: ${data.error}`);
-      }
+      if (data.success) fetchStatus();
+      else alert(`Error: ${data.error}`);
     } catch (e) {
       alert(`Error: ${e.message}`);
     } finally {
       repriceNowBtn.disabled = false;
       repriceNowBtn.innerHTML = '<i class="fa-solid fa-rotate"></i> Reprice Now';
-      fetchStatus();
     }
   });
 
-  // 6. Settings Form Submit
+  // Settings & Rules Submissions
   settingsForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const payload = {
@@ -224,7 +262,6 @@ document.addEventListener('DOMContentLoaded', () => {
       pingIntervalSec: parseInt(inputPingInterval.value) || 120,
       repriceIntervalSec: parseInt(inputRepriceInterval.value) || 180
     };
-
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
@@ -232,18 +269,10 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify(payload)
       });
       const data = await res.json();
-      if (data.success) {
-        alert('API Settings saved!');
-        fetchStatus();
-      } else {
-        alert(`Error saving settings: ${data.error}`);
-      }
-    } catch (err) {
-      alert(`Save failed: ${err.message}`);
-    }
+      if (data.success) { fetchStatus(); } else alert(`Error: ${data.error}`);
+    } catch (err) { alert(`Failed: ${err.message}`); }
   });
 
-  // 7. Rules Form Submit
   rulesForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const payload = {
@@ -251,7 +280,6 @@ document.addEventListener('DOMContentLoaded', () => {
       defaultMinPriceFloor: parseFloat(inputDefaultMin.value) || 0.05,
       autoListNewItems: checkAutoList.checked
     };
-
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
@@ -259,197 +287,164 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify(payload)
       });
       const data = await res.json();
-      if (data.success) {
-        alert('Pricing rules updated!');
-        fetchStatus();
-      } else {
-        alert(`Error: ${data.error}`);
-      }
-    } catch (err) {
-      alert(`Save failed: ${err.message}`);
-    }
+      if (data.success) fetchStatus(); else alert(`Error: ${data.error}`);
+    } catch (err) { alert(`Failed: ${err.message}`); }
   });
 
-  // 8. Bulk Delist All Items
   btnDelistAll.addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to delist ALL items from sale on Market.CSGO?')) return;
+    if (!confirm('Delist ALL items from sale?')) return;
     try {
       const res = await fetch('/api/listings/remove-all', { method: 'POST' });
       const data = await res.json();
-      if (data.success) {
-        alert('All items delisted successfully!');
-        loadSales();
-        fetchStatus();
-      } else {
-        alert(`Error: ${data.error}`);
-      }
-    } catch (e) {
-      alert(`Delist failed: ${e.message}`);
-    }
+      if (data.success) { loadSales(); fetchStatus(); } else alert(`Error: ${data.error}`);
+    } catch (e) { alert(`Failed: ${e.message}`); }
   });
 
-  // 9. Load Active Sales Table
+  // 6. Active Sales List & Filter
   async function loadSales() {
     salesTableBody.innerHTML = '<tr><td colspan="6" class="text-center p-4"><i class="fa-solid fa-spinner fa-spin"></i> Loading Market Listings...</td></tr>';
     try {
       const res = await fetch('/api/listings');
       const json = await res.json();
-      
       if (!json.success || !json.data || !Array.isArray(json.data.items)) {
-        salesTableBody.innerHTML = `<tr><td colspan="6" class="text-center p-4 text-muted">${json.error || 'No active listings found or API Key not configured.'}</td></tr>`;
+        salesTableBody.innerHTML = `<tr><td colspan="6" class="text-center p-4 text-muted">${json.error || 'No active listings.'}</td></tr>`;
         return;
       }
-
-      const items = json.data.items;
-      if (items.length === 0) {
-        salesTableBody.innerHTML = '<tr><td colspan="6" class="text-center p-4 text-muted">No items currently listed for sale.</td></tr>';
-        return;
-      }
-
-      salesTableBody.innerHTML = items.map(item => {
-        const cur = currentStatus && currentStatus.settings ? currentStatus.settings.currency : 'USD';
-        const minFloor = currentStatus && currentStatus.settings.minPrices[item.market_hash_name] || currentStatus.settings.defaultMinPriceFloor || 0.05;
-        const statusBadge = item.status == 1 ? '<span class="status-badge active">On Sale</span>' : '<span class="status-badge">Sold / Trade Pending</span>';
-        
-        return `
-          <tr>
-            <td><strong>${escapeHtml(item.market_hash_name)}</strong></td>
-            <td>${statusBadge}</td>
-            <td><strong>${item.price} ${cur}</strong></td>
-            <td>$${minFloor} ${cur}</td>
-            <td><small>${escapeHtml(item.market_hash_name)}</small></td>
-            <td>
-              <button class="btn btn-sm btn-secondary btn-set-price" data-id="${item.item_id || item.id}" data-price="${item.price}">
-                <i class="fa-solid fa-pen"></i> Price
-              </button>
-              <button class="btn btn-sm btn-danger-outline btn-delist-item" data-id="${item.item_id || item.id}">
-                <i class="fa-solid fa-trash"></i> Delist
-              </button>
-            </td>
-          </tr>
-        `;
-      }).join('');
-
-      // Add Event Listeners for inline edit/delist
-      document.querySelectorAll('.btn-set-price').forEach(b => {
-        b.addEventListener('click', () => setItemPrice(b.getAttribute('data-id'), b.getAttribute('data-price')));
-      });
-
-      document.querySelectorAll('.btn-delist-item').forEach(b => {
-        b.addEventListener('click', () => delistSingleItem(b.getAttribute('data-id')));
-      });
-
+      rawSalesItems = json.data.items;
+      renderSalesTable();
     } catch (e) {
-      salesTableBody.innerHTML = `<tr><td colspan="6" class="text-center p-4 text-muted">Failed to load sales: ${e.message}</td></tr>`;
+      salesTableBody.innerHTML = `<tr><td colspan="6" class="text-center p-4 text-muted">Error: ${e.message}</td></tr>`;
     }
   }
 
-  async function setItemPrice(id, currentPrice) {
-    const newPrice = prompt(`Enter new price in ${currentStatus.settings.currency || 'USD'} for listing #${id}:`, currentPrice);
-    if (!newPrice || isNaN(newPrice)) return;
+  function renderSalesTable() {
+    const query = salesSearchInput.value.toLowerCase().trim();
+    const filtered = rawSalesItems.filter(i => (i.market_hash_name || '').toLowerCase().includes(query));
 
+    if (filtered.length === 0) {
+      salesTableBody.innerHTML = '<tr><td colspan="6" class="text-center p-4 text-muted">No matching items found.</td></tr>';
+      return;
+    }
+
+    salesTableBody.innerHTML = filtered.map(item => {
+      const cur = currentStatus && currentStatus.settings ? currentStatus.settings.currency : 'USD';
+      const minFloor = currentStatus && currentStatus.settings.minPrices[item.market_hash_name] || currentStatus.settings.defaultMinPriceFloor || 0.05;
+      const statusBadge = item.status == 1 ? '<span class="status-badge active"><span class="dot"></span> On Sale</span>' : '<span class="status-badge"><span class="dot"></span> Sold / Pending</span>';
+      
+      return `
+        <tr>
+          <td><strong>${escapeHtml(item.market_hash_name)}</strong></td>
+          <td>${statusBadge}</td>
+          <td><strong class="tabular-nums">${item.price} ${cur}</strong></td>
+          <td class="tabular-nums">$${minFloor}</td>
+          <td><small>${escapeHtml(item.market_hash_name)}</small></td>
+          <td>
+            <button class="btn btn-sm btn-secondary btn-set-price" data-id="${item.item_id || item.id}" data-name="${escapeHtml(item.market_hash_name)}" data-price="${item.price}">
+              <i class="fa-solid fa-pen"></i> Price
+            </button>
+            <button class="btn btn-sm btn-danger-outline btn-delist-item" data-id="${item.item_id || item.id}">
+              <i class="fa-solid fa-trash"></i> Delist
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    document.querySelectorAll('.btn-set-price').forEach(b => {
+      b.addEventListener('click', () => {
+        openPriceModal('Edit Listing Price', b.getAttribute('data-name'), b.getAttribute('data-price'), async (newPrice) => {
+          await updateItemPrice(b.getAttribute('data-id'), newPrice);
+        });
+      });
+    });
+
+    document.querySelectorAll('.btn-delist-item').forEach(b => {
+      b.addEventListener('click', () => delistItem(b.getAttribute('data-id')));
+    });
+  }
+
+  salesSearchInput.addEventListener('input', renderSalesTable);
+
+  async function updateItemPrice(id, price) {
     try {
       const res = await fetch('/api/listings/set-price', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, price: parseFloat(newPrice) })
+        body: JSON.stringify({ id, price })
       });
       const data = await res.json();
-      if (data.success) {
-        alert('Price updated!');
-        loadSales();
-      } else {
-        alert(`Error: ${data.error}`);
-      }
-    } catch (e) {
-      alert(`Update failed: ${e.message}`);
-    }
+      if (data.success) loadSales(); else alert(`Error: ${data.error}`);
+    } catch (e) { alert(`Failed: ${e.message}`); }
   }
 
-  async function delistSingleItem(id) {
-    if (!confirm('Delist this item from sale?')) return;
-    try {
-      const res = await fetch('/api/listings/set-price', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, price: 0 })
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert('Item delisted!');
-        loadSales();
-      } else {
-        alert(`Error: ${data.error}`);
-      }
-    } catch (e) {
-      alert(`Delist failed: ${e.message}`);
-    }
+  async function delistItem(id) {
+    if (!confirm('Delist item from sale?')) return;
+    await updateItemPrice(id, 0);
   }
 
-  // 10. Load Steam Inventory Grid
+  // 7. Inventory List & Filter
   async function loadInventory() {
     inventoryGrid.innerHTML = '<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i> Fetching Steam CS2 inventory...</div>';
     try {
       const res = await fetch('/api/inventory');
       const json = await res.json();
-      
       if (!json.success || !json.data || !Array.isArray(json.data.items)) {
-        inventoryGrid.innerHTML = `<div class="empty-state">${json.error || 'Inventory empty or Steam API unreachable.'}</div>`;
+        inventoryGrid.innerHTML = `<div class="empty-state">${json.error || 'Inventory empty or API Key missing.'}</div>`;
         return;
       }
-
-      const items = json.data.items;
-      if (items.length === 0) {
-        inventoryGrid.innerHTML = '<div class="empty-state">No tradable items found in Steam Inventory.</div>';
-        return;
-      }
-
-      inventoryGrid.innerHTML = items.map(item => {
-        const iconUrl = item.icon_url ? `https://community.cloudflare.steamstatic.com/economy/image/${item.icon_url}/300fx300f` : '';
-        return `
-          <div class="inventory-card">
-            ${iconUrl ? `<img src="${iconUrl}" alt="${escapeHtml(item.market_hash_name)}">` : ''}
-            <div class="item-name">${escapeHtml(item.market_hash_name)}</div>
-            <button class="btn btn-sm btn-primary btn-list-item mt-2" data-id="${item.id}" data-name="${escapeHtml(item.market_hash_name)}">
-              <i class="fa-solid fa-plus"></i> List on Market
-            </button>
-          </div>
-        `;
-      }).join('');
-
-      document.querySelectorAll('.btn-list-item').forEach(b => {
-        b.addEventListener('click', () => listItemOnMarket(b.getAttribute('data-id'), b.getAttribute('data-name')));
-      });
-
+      rawInventoryItems = json.data.items;
+      renderInventoryGrid();
     } catch (e) {
       inventoryGrid.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
     }
   }
 
-  async function listItemOnMarket(id, name) {
-    const price = prompt(`Enter listing price for "${name}" in ${currentStatus.settings.currency || 'USD'}:`);
-    if (!price || isNaN(price)) return;
+  function renderInventoryGrid() {
+    const query = inventorySearchInput.value.toLowerCase().trim();
+    const filtered = rawInventoryItems.filter(i => (i.market_hash_name || '').toLowerCase().includes(query));
 
+    if (filtered.length === 0) {
+      inventoryGrid.innerHTML = '<div class="empty-state">No matching inventory items found.</div>';
+      return;
+    }
+
+    inventoryGrid.innerHTML = filtered.map(item => {
+      const iconUrl = item.icon_url ? `https://community.cloudflare.steamstatic.com/economy/image/${item.icon_url}/300fx300f` : '';
+      return `
+        <div class="inventory-card">
+          ${iconUrl ? `<img src="${iconUrl}" alt="${escapeHtml(item.market_hash_name)}" class="item-img-thumbnail">` : ''}
+          <div class="item-name">${escapeHtml(item.market_hash_name)}</div>
+          <button class="btn btn-sm btn-primary btn-list-item mt-2" data-id="${item.id}" data-name="${escapeHtml(item.market_hash_name)}">
+            <i class="fa-solid fa-plus"></i> List on Market
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    document.querySelectorAll('.btn-list-item').forEach(b => {
+      b.addEventListener('click', () => {
+        openPriceModal('List Item on Market.CSGO', b.getAttribute('data-name'), '1.00', async (price) => {
+          await listItem(b.getAttribute('data-id'), price);
+        });
+      });
+    });
+  }
+
+  inventorySearchInput.addEventListener('input', renderInventoryGrid);
+
+  async function listItem(id, price) {
     try {
       const res = await fetch('/api/listings/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, price: parseFloat(price) })
+        body: JSON.stringify({ id, price })
       });
       const data = await res.json();
-      if (data.success) {
-        alert(`Successfully listed "${name}" for ${price}!`);
-        loadInventory();
-        fetchStatus();
-      } else {
-        alert(`Error listing item: ${data.error}`);
-      }
-    } catch (e) {
-      alert(`Listing failed: ${e.message}`);
-    }
+      if (data.success) { loadInventory(); fetchStatus(); } else alert(`Error: ${data.error}`);
+    } catch (e) { alert(`Failed: ${e.message}`); }
   }
 
-  // 11. Load P2P Trade Offers
+  // 8. P2P Trades
   async function loadP2PTrades() {
     p2pTradesList.innerHTML = '<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i> Checking pending P2P trades...</div>';
     try {
@@ -459,22 +454,19 @@ document.addEventListener('DOMContentLoaded', () => {
         p2pTradesList.innerHTML = '<div class="empty-state">No pending P2P trade requests right now.</div>';
         return;
       }
-
-      p2pTradesList.innerHTML = json.data.offers.map(o => {
-        return `
-          <div class="alert alert-info mt-2">
-            <i class="fa-solid fa-handshake"></i> <strong>Pending Trade Offer Required:</strong><br>
-            Partner ID: <code>${o.partner}</code> | Token: <code>${o.token}</code><br>
+      p2pTradesList.innerHTML = json.data.offers.map(o => `
+        <div class="alert alert-info mt-2">
+          <i class="fa-solid fa-handshake"></i>
+          <div>
+            <strong>Pending Trade Offer Required:</strong><br>
+            Partner ID: <code class="tabular-nums">${o.partner}</code> | Token: <code>${o.token}</code><br>
             Offer Message: "<strong>${escapeHtml(o.tradeoffermessage || '')}</strong>"
           </div>
-        `;
-      }).join('');
-    } catch (e) {
-      p2pTradesList.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
-    }
+        </div>
+      `).join('');
+    } catch (e) { p2pTradesList.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`; }
   }
 
-  // Event Listeners for refresh buttons
   btnRefreshData.addEventListener('click', fetchStatus);
   btnRefreshSales.addEventListener('click', loadSales);
   btnRefreshInventory.addEventListener('click', loadInventory);
@@ -485,7 +477,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
-  // Poll status every 4 seconds
   fetchStatus();
   setInterval(fetchStatus, 4000);
 });
