@@ -39,20 +39,34 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalCancelBtn = document.getElementById('modalCancelBtn');
   const modalCloseBtn = document.getElementById('modalCloseBtn');
 
-  const btnRefreshData = document.getElementById('repriceNowBtn');
   const btnDelistAll = document.getElementById('btnDelistAll');
   const btnRefreshSales = document.getElementById('btnRefreshSales');
   const btnRefreshInventory = document.getElementById('btnRefreshInventory');
   const btnRefreshP2P = document.getElementById('btnRefreshP2P');
+  const btnListAllInventory = document.getElementById('btnListAllInventory');
+  const btnForceRefreshInv = document.getElementById('btnForceRefreshInv');
+  const btnRefreshProfit = document.getElementById('btnRefreshProfit');
 
   const salesTableBody = document.getElementById('salesTableBody');
   const inventoryGrid = document.getElementById('inventoryGrid');
   const p2pTradesList = document.getElementById('p2pTradesList');
   const fullLogStream = document.getElementById('fullLogStream');
+  const inventoryCountLabel = document.getElementById('inventoryCountLabel');
+
+  // Analytics elements
+  const statTotalProfit = document.getElementById('statTotalProfit');
+  const statTotalSales = document.getElementById('statTotalSales');
+  const statSalesRevenue = document.getElementById('statSalesRevenue');
+  const statROI = document.getElementById('statROI');
+  const topItemsBody = document.getElementById('topItemsBody');
+  const recentSalesBody = document.getElementById('recentSalesBody');
+  const profitChartContainer = document.getElementById('profitChartContainer');
+  const chartEmptyState = document.getElementById('chartEmptyState');
 
   let currentStatus = null;
   let rawSalesItems = [];
   let rawInventoryItems = [];
+  let currentMarketPrices = {};
   let activeModalCallback = null;
 
   // Helper for CS2 item rarity colors
@@ -65,6 +79,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (n.includes('restricted') || n.includes('decimator') || n.includes('muertos')) return 'var(--rarity-restricted)';
     if (n.includes('mil-spec') || n.includes('blue fissure')) return 'var(--rarity-milspec)';
     return 'var(--rarity-industrial)';
+  }
+
+  function getCurrencySymbol() {
+    const cur = currentStatus?.settings?.currency || 'USD';
+    if (cur === 'RUB') return '₽';
+    if (cur === 'EUR') return '€';
+    return '$';
   }
 
   // Nav Switch
@@ -82,6 +103,11 @@ document.addEventListener('DOMContentLoaded', () => {
         case 'dashboard':
           pageTitle.textContent = 'Trading Terminal Overview';
           pageSubtitle.textContent = 'Real-time stats, 24/7 heartbeat monitoring & account balance';
+          break;
+        case 'analytics':
+          pageTitle.textContent = 'Profit Analytics';
+          pageSubtitle.textContent = 'Revenue tracking, ROI, top items & daily performance';
+          loadProfitStats();
           break;
         case 'sales':
           pageTitle.textContent = 'Active Market Listings';
@@ -288,36 +314,62 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // ═══════════════════════════════════════════════════════
+  // LISTINGS — Enhanced with Market Prices
+  // ═══════════════════════════════════════════════════════
+
   async function loadSales() {
-    salesTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px;">Loading active sales...</td></tr>';
+    salesTableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;">Loading active sales...</td></tr>';
     try {
       const res = await fetch('/api/listings');
       const json = await res.json();
       if (!json.success || !json.data || !Array.isArray(json.data.items)) {
-        salesTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">${json.error || 'No active listings.'}</td></tr>`;
+        salesTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">${json.error || 'No active listings.'}</td></tr>`;
         return;
       }
       rawSalesItems = json.data.items;
+      currentMarketPrices = json.marketPrices || {};
       renderSalesTable();
     } catch (e) {
-      salesTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">Error: ${e.message}</td></tr>`;
+      salesTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">Error: ${e.message}</td></tr>`;
     }
   }
 
   function renderSalesTable() {
     const query = (salesSearchInput ? salesSearchInput.value : '').toLowerCase().trim();
     const filtered = rawSalesItems.filter(i => (i.market_hash_name || '').toLowerCase().includes(query));
+    const sym = getCurrencySymbol();
 
     if (filtered.length === 0) {
-      salesTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">No items found.</td></tr>';
+      salesTableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">No items found.</td></tr>';
       return;
     }
 
     salesTableBody.innerHTML = filtered.map(item => {
-      const cur = currentStatus && currentStatus.settings ? currentStatus.settings.currency : 'USD';
-      const minFloor = currentStatus && currentStatus.settings.minPrices[item.market_hash_name] || currentStatus.settings.defaultMinPriceFloor || 0.05;
+      const cur = currentStatus?.settings?.currency || 'USD';
+      const minFloor = currentStatus?.settings?.minPrices?.[item.market_hash_name] || currentStatus?.settings?.defaultMinPriceFloor || 0.05;
       const rarityColor = getItemRarityColor(item.market_hash_name);
-      const statusBadge = item.status == 1 ? '<span style="color: var(--status-emerald); font-weight:700;">● Listed</span>' : '<span style="color: var(--status-amber); font-weight:700;">● Pending Trade</span>';
+      const statusBadge = item.status == 1
+        ? '<span style="color: var(--status-emerald); font-weight:700;">● Listed</span>'
+        : '<span style="color: var(--status-amber); font-weight:700;">● Pending</span>';
+
+      const ourPrice = parseFloat(item.price);
+      const marketMin = currentMarketPrices[item.market_hash_name];
+      let marketMinDisplay = '<span class="text-neutral">—</span>';
+      let gapDisplay = '<span class="gap-badge gap-neutral">—</span>';
+
+      if (marketMin !== undefined) {
+        marketMinDisplay = `<span class="tabular-nums">${sym}${marketMin.toFixed(2)}</span>`;
+        const gap = ourPrice - marketMin;
+        const gapPct = marketMin > 0 ? ((gap / marketMin) * 100).toFixed(1) : 0;
+        if (gap < -0.005) {
+          gapDisplay = `<span class="gap-badge gap-positive">${sym}${gap.toFixed(2)} (${gapPct}%)</span>`;
+        } else if (gap > 0.005) {
+          gapDisplay = `<span class="gap-badge gap-negative">+${sym}${gap.toFixed(2)} (+${Math.abs(gapPct)}%)</span>`;
+        } else {
+          gapDisplay = `<span class="gap-badge gap-positive">= #1</span>`;
+        }
+      }
 
       return `
         <tr>
@@ -328,8 +380,10 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </td>
           <td>${statusBadge}</td>
-          <td><strong class="tabular-nums">${item.price} ${cur}</strong></td>
-          <td class="tabular-nums">$${minFloor}</td>
+          <td><strong class="tabular-nums">${sym}${ourPrice.toFixed(2)}</strong></td>
+          <td>${marketMinDisplay}</td>
+          <td>${gapDisplay}</td>
+          <td class="tabular-nums">${sym}${minFloor}</td>
           <td>
             <button class="btn btn-sm btn-secondary btn-set-price" data-id="${item.item_id || item.id}" data-name="${escapeHtml(item.market_hash_name)}" data-price="${item.price}">
               <i class="fa-solid fa-pen"></i> Price
@@ -374,6 +428,10 @@ document.addEventListener('DOMContentLoaded', () => {
     await updateItemPrice(id, 0);
   }
 
+  // ═══════════════════════════════════════════════════════
+  // INVENTORY — With Mass List & Force Refresh
+  // ═══════════════════════════════════════════════════════
+
   async function loadInventory() {
     inventoryGrid.innerHTML = '<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i> Loading inventory...</div>';
     try {
@@ -381,9 +439,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const json = await res.json();
       if (!json.success || !json.data || !Array.isArray(json.data.items)) {
         inventoryGrid.innerHTML = `<div class="empty-state">${json.error || 'Inventory empty.'}</div>`;
+        if (inventoryCountLabel) inventoryCountLabel.textContent = '0 items';
         return;
       }
       rawInventoryItems = json.data.items;
+      if (inventoryCountLabel) inventoryCountLabel.textContent = `${rawInventoryItems.length} items`;
       renderInventoryGrid();
     } catch (e) {
       inventoryGrid.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
@@ -438,6 +498,210 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) { alert(`Failed: ${e.message}`); }
   }
 
+  // Mass list all tradable inventory items
+  if (btnListAllInventory) {
+    btnListAllInventory.addEventListener('click', async () => {
+      if (rawInventoryItems.length === 0) {
+        alert('No inventory items loaded. Click "Fetch Inventory" first.');
+        return;
+      }
+      const tradable = rawInventoryItems.filter(i => i.tradable !== false);
+      if (tradable.length === 0) {
+        alert('No tradable items in inventory.');
+        return;
+      }
+      if (!confirm(`List ${tradable.length} item(s) at market undercut price?`)) return;
+
+      btnListAllInventory.disabled = true;
+      btnListAllInventory.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Listing...';
+      try {
+        // Use mass-add if available, fallback to individual
+        const items = tradable.map(i => ({
+          id: i.id,
+          price: 100 // $1.00 default, will be auto-repriced
+        }));
+
+        // Batch in groups of 50
+        for (let i = 0; i < items.length; i += 50) {
+          const batch = items.slice(i, i + 50);
+          await fetch('/api/listings/mass-add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: batch })
+          });
+        }
+        loadInventory();
+        fetchStatus();
+      } catch (e) {
+        alert(`Error: ${e.message}`);
+      } finally {
+        btnListAllInventory.disabled = false;
+        btnListAllInventory.innerHTML = '<i class="fa-solid fa-plus"></i> List All';
+      }
+    });
+  }
+
+  // Force refresh Steam inventory on market side
+  if (btnForceRefreshInv) {
+    btnForceRefreshInv.addEventListener('click', async () => {
+      btnForceRefreshInv.disabled = true;
+      btnForceRefreshInv.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Syncing...';
+      try {
+        await fetch('/api/inventory/update', { method: 'POST' });
+        // Wait a moment then reload
+        setTimeout(() => loadInventory(), 1500);
+      } catch (e) {
+        alert(`Error: ${e.message}`);
+      } finally {
+        setTimeout(() => {
+          btnForceRefreshInv.disabled = false;
+          btnForceRefreshInv.innerHTML = '<i class="fa-solid fa-rotate"></i> Sync Steam';
+        }, 2000);
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // ANALYTICS — Profit Tracking & Charts
+  // ═══════════════════════════════════════════════════════
+
+  async function loadProfitStats(forceRefresh = false) {
+    try {
+      const url = forceRefresh ? '/api/profit-stats?refresh=true' : '/api/profit-stats';
+      const res = await fetch(url);
+      const json = await res.json();
+
+      if (!json.success || !json.stats) {
+        if (chartEmptyState) chartEmptyState.textContent = 'No analytics data available. Make sure your API key is configured.';
+        return;
+      }
+
+      const s = json.stats;
+      const sym = getCurrencySymbol();
+
+      // Update KPI cards
+      if (statTotalProfit) {
+        const profitVal = s.totalProfit || 0;
+        statTotalProfit.textContent = `${sym}${profitVal.toFixed(2)}`;
+        statTotalProfit.className = `val tabular-nums ${profitVal >= 0 ? 'text-profit' : 'text-loss'}`;
+      }
+      if (statTotalSales) statTotalSales.textContent = s.totalSales || 0;
+      if (statSalesRevenue) statSalesRevenue.textContent = `${sym}${(s.totalSalesAmount || 0).toFixed(2)}`;
+      if (statROI) {
+        const roi = s.roi || 0;
+        statROI.textContent = `${roi >= 0 ? '+' : ''}${roi}%`;
+        statROI.className = `val tabular-nums ${roi >= 0 ? 'text-profit' : 'text-loss'}`;
+      }
+
+      // Render bar chart
+      renderBarChart(s.dailyChart || []);
+
+      // Render top items table
+      renderTopItems(s.topItems || []);
+
+      // Render recent sales
+      renderRecentSales(s.recentSales || []);
+
+    } catch (e) {
+      console.error('Analytics error:', e);
+      if (chartEmptyState) chartEmptyState.textContent = 'Error loading analytics.';
+    }
+  }
+
+  function renderBarChart(dailyData) {
+    if (!profitChartContainer) return;
+
+    if (dailyData.length === 0) {
+      if (chartEmptyState) chartEmptyState.textContent = 'No daily data available yet.';
+      return;
+    }
+
+    if (chartEmptyState) chartEmptyState.style.display = 'none';
+
+    const maxAmount = Math.max(...dailyData.map(d => d.amount), 0.01);
+    const sym = getCurrencySymbol();
+
+    const barsHtml = dailyData.map(d => {
+      const heightPct = Math.max((d.amount / maxAmount) * 100, 2);
+      const dayLabel = d.date.slice(5); // MM-DD
+      return `<div class="bar" style="height: ${heightPct}%;" title="${d.date}: ${sym}${d.amount.toFixed(2)} (${d.sales} sales)">
+        <div class="bar-tooltip">${d.date}<br>${sym}${d.amount.toFixed(2)} · ${d.sales} sales</div>
+      </div>`;
+    }).join('');
+
+    const labelsHtml = dailyData.map(d => `<span>${d.date.slice(8)}</span>`).join('');
+
+    // Replace canvas with CSS bar chart
+    profitChartContainer.innerHTML = `
+      <div class="bar-chart">${barsHtml}</div>
+      <div class="bar-chart-labels">${labelsHtml}</div>
+    `;
+  }
+
+  function renderTopItems(items) {
+    if (!topItemsBody) return;
+    const sym = getCurrencySymbol();
+
+    if (items.length === 0) {
+      topItemsBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px;" class="text-dim">No item data available.</td></tr>';
+      return;
+    }
+
+    topItemsBody.innerHTML = items.map(item => {
+      const profitClass = item.profit >= 0 ? 'text-profit' : 'text-loss';
+      const rarityColor = getItemRarityColor(item.name);
+      return `
+        <tr>
+          <td>
+            <div class="item-title-box">
+              <div class="name">${escapeHtml(item.name)}</div>
+              <div class="rarity-bar" style="background: ${rarityColor};"></div>
+            </div>
+          </td>
+          <td class="tabular-nums">${item.sold}</td>
+          <td class="tabular-nums">${sym}${item.revenue.toFixed(2)}</td>
+          <td class="tabular-nums">${sym}${item.spent.toFixed(2)}</td>
+          <td class="tabular-nums ${profitClass}" style="font-weight: 700;">${item.profit >= 0 ? '+' : ''}${sym}${item.profit.toFixed(2)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function renderRecentSales(sales) {
+    if (!recentSalesBody) return;
+    const sym = getCurrencySymbol();
+
+    if (sales.length === 0) {
+      recentSalesBody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 20px;" class="text-dim">No recent sales.</td></tr>';
+      return;
+    }
+
+    recentSalesBody.innerHTML = sales.map(sale => {
+      const timeStr = sale.time ? new Date(sale.time * 1000).toLocaleString() : '—';
+      return `
+        <tr>
+          <td>${escapeHtml(sale.name)}</td>
+          <td class="tabular-nums" style="font-weight: 600;">${sym}${sale.price.toFixed(2)}</td>
+          <td class="text-dim" style="font-size: 11px;">${timeStr}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  if (btnRefreshProfit) {
+    btnRefreshProfit.addEventListener('click', async () => {
+      btnRefreshProfit.disabled = true;
+      btnRefreshProfit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Loading...';
+      await loadProfitStats(true);
+      btnRefreshProfit.disabled = false;
+      btnRefreshProfit.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Refresh Data';
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // P2P TRADES
+  // ═══════════════════════════════════════════════════════
+
   async function loadP2PTrades() {
     if (!p2pTradesList) return;
     p2pTradesList.innerHTML = '<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i> Checking trade offers...</div>';
@@ -457,6 +721,10 @@ document.addEventListener('DOMContentLoaded', () => {
       `).join('');
     } catch (e) { p2pTradesList.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`; }
   }
+
+  // ═══════════════════════════════════════════════════════
+  // EVENT LISTENERS
+  // ═══════════════════════════════════════════════════════
 
   if (btnRefreshSales) btnRefreshSales.addEventListener('click', loadSales);
   if (btnRefreshInventory) btnRefreshInventory.addEventListener('click', loadInventory);
