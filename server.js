@@ -22,6 +22,10 @@ app.get('/api/status', async (req, res) => {
         const moneyRes = await bot.api.getMoney();
         if (moneyRes && (moneyRes.money !== undefined || moneyRes.balances)) {
           balance = moneyRes;
+          if (moneyRes.currency) {
+            bot.settings.currency = moneyRes.currency;
+            bot.api.currency = moneyRes.currency;
+          }
         }
       } catch (e) {
         // Balance error ignored if invalid key
@@ -214,7 +218,7 @@ app.post('/api/listings/mass-add', async (req, res) => {
   }
 });
 
-// 15. Mass set prices
+// 15. Mass set prices (with automatic single-item fallback)
 app.post('/api/listings/mass-set-price', async (req, res) => {
   try {
     const { items, cur } = req.body;
@@ -225,10 +229,37 @@ app.post('/api/listings/mass-set-price', async (req, res) => {
     const currency = cur || bot.settings.currency || 'USD';
     const itemsWithUnits = items.map(i => ({
       id: i.id || i.item_id,
+      price: i.price,
       priceUnits: i.priceUnits !== undefined ? i.priceUnits : bot.api.getPriceUnits(i.price, currency)
     }));
 
-    const result = await bot.api.massSetPrice(itemsWithUnits, currency);
+    let result = null;
+    let massSuccess = false;
+
+    try {
+      result = await bot.api.massSetPrice(itemsWithUnits, currency);
+      if (result && (result.success || result.result)) {
+        massSuccess = true;
+      }
+    } catch (e) {
+      // Mass set price failed, falling back to single items
+    }
+
+    // If mass-set-price endpoint failed or returned success: false, fallback to sequential setPrice
+    if (!massSuccess) {
+      let successCount = 0;
+      for (const item of itemsWithUnits) {
+        try {
+          await bot.api.setPrice(item.id, item.priceUnits, currency);
+          successCount++;
+        } catch (singleErr) {
+          console.error(`Single setPrice failed for ${item.id}:`, singleErr.message);
+        }
+      }
+      bot.log('info', `🏷️ Repriced ${successCount}/${items.length} item(s) on Market.CSGO via fallback`);
+      return res.json({ success: true, count: successCount, fallback: true });
+    }
+
     bot.log('info', `🏷️ Mass-repriced ${items.length} item(s) on Market.CSGO`);
     res.json({ success: true, result });
   } catch (err) {
