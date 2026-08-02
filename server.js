@@ -2,9 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const bot = require('./botEngine');
+const ProfitTracker = require('./profitTracker');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const profitTracker = new ProfitTracker(bot.api);
 
 app.use(cors());
 app.use(express.json());
@@ -60,6 +62,7 @@ app.post('/api/bot/stop', (req, res) => {
 app.post('/api/settings', (req, res) => {
   try {
     bot.updateSettings(req.body);
+    // Update profitTracker's API reference too
     res.json({ success: true, settings: bot.settings });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
@@ -86,11 +89,27 @@ app.get('/api/inventory', async (req, res) => {
   }
 });
 
-// 7. Get user active market listings
+// 7. Get user active market listings (enhanced with market prices)
 app.get('/api/listings', async (req, res) => {
   try {
     const data = await bot.api.getItems();
-    res.json({ success: true, data });
+
+    // Optionally enrich with market prices for competitive analysis
+    let marketPrices = {};
+    try {
+      const pricesRes = await bot.api.getMarketPrices(bot.settings.currency);
+      if (pricesRes && pricesRes.items && Array.isArray(pricesRes.items)) {
+        pricesRes.items.forEach(p => {
+          if (p.market_hash_name && p.price) {
+            marketPrices[p.market_hash_name] = parseFloat(p.price);
+          }
+        });
+      }
+    } catch (e) {
+      // Non-critical: market prices unavailable
+    }
+
+    res.json({ success: true, data, marketPrices });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -148,9 +167,104 @@ app.get('/api/p2p-trades', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════
+// NEW ROUTES: Analytics, History, Mass Operations
+// ═══════════════════════════════════════════════════════
+
+// 12. Get trade history
+app.get('/api/history', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const data = await bot.api.getHistory(from, to);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 13. Get profit statistics (computed from history)
+app.get('/api/profit-stats', async (req, res) => {
+  try {
+    const forceRefresh = req.query.refresh === 'true';
+    const stats = await profitTracker.getStats(forceRefresh);
+    res.json({ success: true, stats });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 14. Mass add items to sale (up to 50)
+app.post('/api/listings/mass-add', async (req, res) => {
+  try {
+    const { items, cur } = req.body;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, error: 'Missing items array' });
+    }
+    if (items.length > 50) {
+      return res.status(400).json({ success: false, error: 'Max 50 items per batch' });
+    }
+
+    const result = await bot.api.massAddToSale(items, cur || bot.settings.currency);
+    bot.log('success', `📦 Mass-listed ${items.length} item(s) on Market.CSGO`);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 15. Mass set prices
+app.post('/api/listings/mass-set-price', async (req, res) => {
+  try {
+    const { items, cur } = req.body;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, error: 'Missing items array' });
+    }
+
+    const result = await bot.api.massSetPrice(items, cur || bot.settings.currency);
+    bot.log('info', `🏷️ Mass-repriced ${items.length} item(s) on Market.CSGO`);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 16. Search market by item name (competitive monitoring)
+app.get('/api/market-search/:name', async (req, res) => {
+  try {
+    const hashName = decodeURIComponent(req.params.name);
+    const data = await bot.api.searchItemByHashName(hashName);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 17. Force refresh Steam inventory on market side
+app.post('/api/inventory/update', async (req, res) => {
+  try {
+    const result = await bot.api.updateInventory();
+    bot.log('info', '🔄 Forced Steam inventory refresh on Market.CSGO');
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 18. Get operation history (full: buys, sells, deposits, withdrawals)
+app.get('/api/operation-history', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const data = await bot.api.getOperationHistory(from, to);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`=================================================`);
   console.log(`🚀 Market.CSGO 24/7 Trading Bot Web UI is Live!`);
   console.log(`🌐 Open in Browser: http://localhost:${PORT}`);
   console.log(`=================================================`);
 });
+
