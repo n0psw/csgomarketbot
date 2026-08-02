@@ -164,6 +164,170 @@ class MarketApi {
   async getTradeRequestGiveP2PAll() {
     return this.request('trade-request-give-p2p-all');
   }
+
+  // ═══════════════════════════════════════════════════════
+  // NEW: Analytics & History
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * 11. Get purchase/sale history
+   * @param {string} dateFrom - DD-MM-YYYY or UNIX timestamp
+   * @param {string} dateTo - UNIX timestamp (optional)
+   */
+  async getHistory(dateFrom, dateTo) {
+    const params = {};
+    if (dateFrom) params.date = dateFrom;
+    if (dateTo) params.date_end = dateTo;
+    return this.request('history', params);
+  }
+
+  /**
+   * 12. Get full operation history (buys, sells, deposits, withdrawals)
+   * @param {string} dateFrom - DD-MM-YYYY or UNIX timestamp
+   * @param {string} dateTo - UNIX timestamp (optional)
+   */
+  async getOperationHistory(dateFrom, dateTo) {
+    const params = {};
+    if (dateFrom) params.date = dateFrom;
+    if (dateTo) params.date_end = dateTo;
+    return this.request('operation-history', params);
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // NEW: Search & Price Monitoring
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * 13. Search for a single item by market_hash_name
+   * Returns all current listings for this item with prices
+   * @param {string} hashName - e.g. "AK-47 | Redline (Field-Tested)"
+   */
+  async searchItemByHashName(hashName) {
+    return this.request('search-item-by-hash-name', {
+      hash_name: hashName
+    });
+  }
+
+  /**
+   * 14. Bulk search items by multiple hash names
+   * @param {string[]} hashNames - Array of market_hash_name values
+   */
+  async searchListItems(hashNames) {
+    const listParam = hashNames.join(',');
+    return this.request('search-list-items-by-hash-name-all', {
+      list_hash_name: listParam
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // NEW: Mass Operations
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * 15. Mass set prices for multiple items at once
+   * @param {Array<{id: string, price: number, cur: string}>} items
+   */
+  async massSetPrice(items, cur = this.currency) {
+    // API expects: id=X&price=Y&cur=Z for each item, comma-separated
+    const ids = items.map(i => i.id).join(',');
+    const prices = items.map(i => Math.round(i.price)).join(',');
+    return this.request('mass-set-price', {
+      id: ids,
+      price: prices,
+      cur
+    });
+  }
+
+  /**
+   * 16. Mass set prices by market_hash_name
+   * @param {Array<{hash_name: string, price: number}>} items
+   */
+  async massSetPriceByHashName(items, cur = this.currency) {
+    const hashNames = items.map(i => i.hash_name).join(',');
+    const prices = items.map(i => Math.round(i.price)).join(',');
+    return this.request('mass-set-price-mhn', {
+      hash_name: hashNames,
+      price: prices,
+      cur
+    });
+  }
+
+  /**
+   * 17. Mass add items to sale (up to 50 at once)
+   * @param {Array<{id: string, price: number}>} items - [{id: assetId, price: cents}]
+   * @param {string} cur - Currency
+   */
+  async massAddToSale(items, cur = this.currency) {
+    // Build the items param as JSON string: {"id":"price","id2":"price2",...}
+    const itemsObj = {};
+    items.forEach(i => {
+      itemsObj[i.id] = Math.round(i.price);
+    });
+    return this.request('mass-add-to-sale', {
+      items: JSON.stringify(itemsObj),
+      cur
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // NEW: Inventory & Account
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * 18. Force refresh Steam inventory cache on market side
+   */
+  async updateInventory() {
+    return this.request('update-inventory');
+  }
+
+  /**
+   * 19. Get Steam ID associated with this API key
+   */
+  async getMySteamId() {
+    return this.request('get-my-steam-id');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // NEW: Buy & Orders
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * 20. Buy an item from market
+   * @param {string} id - Market item listing ID
+   * @param {number} price - Price in cents
+   * @param {string} customId - Your unique custom ID for tracking
+   */
+  async buyItem(id, price, customId) {
+    const params = { id, price: Math.round(price) };
+    if (customId) params.custom_id = customId;
+    return this.request('buy', params);
+  }
+
+  /**
+   * 21. Get active buy orders
+   */
+  async getOrders() {
+    return this.request('get-orders');
+  }
+
+  /**
+   * 22. Get buy orders execution log
+   */
+  async getOrdersLog() {
+    return this.request('get-orders-log');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // NEW: WebSocket
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * 23. Get WebSocket token for real-time notifications
+   * Token is valid for 10 minutes, connect to wss://wsprice.csgo.com
+   */
+  async getWsToken() {
+    return this.request('get-ws-token');
+  }
 }
 
 module.exports = MarketApi;
