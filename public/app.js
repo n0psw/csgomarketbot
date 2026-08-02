@@ -385,6 +385,9 @@ document.addEventListener('DOMContentLoaded', () => {
           <td>${gapDisplay}</td>
           <td class="tabular-nums">${sym}${minFloor}</td>
           <td>
+            <button class="btn btn-sm btn-success btn-top1-item" data-id="${item.item_id || item.id}" data-name="${escapeHtml(item.market_hash_name)}" data-market-min="${marketMin || ''}">
+              <i class="fa-solid fa-bolt"></i> Top-1
+            </button>
             <button class="btn btn-sm btn-secondary btn-set-price" data-id="${item.item_id || item.id}" data-name="${escapeHtml(item.market_hash_name)}" data-price="${item.price}">
               <i class="fa-solid fa-pen"></i> Price
             </button>
@@ -396,6 +399,30 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
     }).join('');
 
+    document.querySelectorAll('.btn-top1-item').forEach(b => {
+      b.addEventListener('click', async () => {
+        const id = b.getAttribute('data-id');
+        const hashName = b.getAttribute('data-name');
+        const marketMinRaw = b.getAttribute('data-market-min');
+        
+        let marketMin = parseFloat(marketMinRaw);
+        if (isNaN(marketMin) || marketMin <= 0) {
+          alert(`Could not detect current market min price for "${hashName}".`);
+          return;
+        }
+
+        const undercut = currentStatus?.settings?.undercutAmount || 0.01;
+        const minFloor = currentStatus?.settings?.minPrices?.[hashName] || currentStatus?.settings?.defaultMinPriceFloor || 0.05;
+
+        let targetPrice = Math.max(marketMin - undercut, minFloor);
+        targetPrice = Math.round(targetPrice * 100) / 100;
+
+        b.disabled = true;
+        b.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        await updateItemPrice(id, targetPrice);
+      });
+    });
+
     document.querySelectorAll('.btn-set-price').forEach(b => {
       b.addEventListener('click', () => {
         openPriceModal('Edit Listing Price', b.getAttribute('data-name'), b.getAttribute('data-price'), async (newPrice) => {
@@ -406,6 +433,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.querySelectorAll('.btn-delist-item').forEach(b => {
       b.addEventListener('click', () => delistItem(b.getAttribute('data-id')));
+    });
+  }
+
+  const btnMatchAllTop1 = document.getElementById('btnMatchAllTop1');
+  if (btnMatchAllTop1) {
+    btnMatchAllTop1.addEventListener('click', async () => {
+      if (rawSalesItems.length === 0) return;
+
+      const undercut = currentStatus?.settings?.currency === 'RUB' ? 0.01 : (currentStatus?.settings?.undercutAmount || 0.01);
+      const undercutStep = currentStatus?.settings?.undercutAmount || 0.01;
+      
+      const itemsToUpdate = [];
+      for (const item of rawSalesItems) {
+        const hashName = item.market_hash_name;
+        const marketMin = currentMarketPrices[hashName];
+        if (!marketMin) continue;
+
+        const minFloor = currentStatus?.settings?.minPrices?.[hashName] || currentStatus?.settings?.defaultMinPriceFloor || 0.05;
+        let targetPrice = Math.max(marketMin - undercutStep, minFloor);
+        targetPrice = Math.round(targetPrice * 100) / 100;
+        
+        const currentPriceFloat = parseFloat(item.price);
+        if (Math.abs(targetPrice - currentPriceFloat) >= 0.009) {
+          itemsToUpdate.push({
+            id: item.item_id || item.id,
+            price: Math.round(targetPrice * 100) // cents
+          });
+        }
+      }
+
+      if (itemsToUpdate.length === 0) {
+        alert('All items are already at Top-1 price!');
+        return;
+      }
+
+      if (!confirm(`Match Top-1 price for ${itemsToUpdate.length} item(s)?`)) return;
+
+      btnMatchAllTop1.disabled = true;
+      btnMatchAllTop1.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
+
+      try {
+        await fetch('/api/listings/mass-set-price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: itemsToUpdate })
+        });
+        loadSales();
+        fetchStatus();
+      } catch (e) {
+        alert(`Error: ${e.message}`);
+      } finally {
+        btnMatchAllTop1.disabled = false;
+        btnMatchAllTop1.innerHTML = '<i class="fa-solid fa-bolt"></i> Set All to Top-1';
+      }
     });
   }
 
