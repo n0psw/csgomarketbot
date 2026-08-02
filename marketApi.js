@@ -60,12 +60,19 @@ class MarketApi {
           queryParams.key = this.apiKey;
         }
 
-        const response = await axios({
+        const reqConfig = {
           method: item.method,
           url,
           params: queryParams,
           timeout: 10000
-        });
+        };
+
+        if (item.method === 'POST') {
+          reqConfig.data = item.body || '';
+          reqConfig.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+        }
+
+        const response = await axios(reqConfig);
 
         item.resolve(response.data);
       } catch (err) {
@@ -90,7 +97,7 @@ class MarketApi {
    * 2. Ping engine - Keep 24/7 online status (Required every 2-3 min)
    */
   async pingNew() {
-    return this.request('ping-new');
+    return this.request('ping-new', {}, 'POST');
   }
 
   /**

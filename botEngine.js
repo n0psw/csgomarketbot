@@ -18,7 +18,7 @@ class BotEngine {
       defaultMinPriceFloor: 0.05, // Minimum safety floor in USD
       minPrices: {}, // Custom min price per market_hash_name { "AK-47 | Redline (FT)": 10.00 }
       pingIntervalSec: 120, // 2 minutes
-      repriceIntervalSec: 180, // 3 minutes
+      repriceIntervalSec: 30, // 30 seconds (быстрое перебивание цен)
     };
 
     this.stats = {
