@@ -39,6 +39,9 @@
         <button class="nav-item active" data-tab="dashboard">
           <i class="fa-solid fa-chart-simple"></i> Dashboard
         </button>
+        <button class="nav-item" data-tab="analytics">
+          <i class="fa-solid fa-chart-line"></i> Analytics
+        </button>
         <button class="nav-item" data-tab="sales">
           <i class="fa-solid fa-tags"></i> Listed Items <span class="count-pill tabular-nums" id="navSalesCount">0</span>
         </button>
@@ -138,7 +141,91 @@
         </div>
       </section>
 
-      <!-- TAB 2: ACTIVE LISTINGS -->
+      <!-- TAB 2: ANALYTICS -->
+      <section class="tab-content" id="tab-analytics">
+        <div class="terminal-stats">
+          <div class="t-stat-card stat-profit">
+            <span class="label">Total Profit (30d)</span>
+            <span class="val tabular-nums" id="statTotalProfit">$0.00</span>
+            <span class="sub">Net earnings</span>
+          </div>
+          <div class="t-stat-card">
+            <span class="label">Total Sales</span>
+            <span class="val tabular-nums" id="statTotalSales">0</span>
+            <span class="sub">Items sold</span>
+          </div>
+          <div class="t-stat-card">
+            <span class="label">Sales Revenue</span>
+            <span class="val tabular-nums" id="statSalesRevenue">$0.00</span>
+            <span class="sub">Gross income</span>
+          </div>
+          <div class="t-stat-card">
+            <span class="label">ROI</span>
+            <span class="val tabular-nums" id="statROI">0%</span>
+            <span class="sub">Return on investment</span>
+          </div>
+        </div>
+
+        <!-- Profit Chart -->
+        <div class="terminal-card">
+          <div class="terminal-header">
+            <h3><i class="fa-solid fa-chart-area text-accent"></i> Daily Revenue (Last 30 Days)</h3>
+            <button class="btn btn-sm btn-secondary" id="btnRefreshProfit">
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh Data
+            </button>
+          </div>
+          <div class="chart-container" id="profitChartContainer">
+            <canvas id="profitChart"></canvas>
+            <div class="empty-state" id="chartEmptyState">Loading analytics...</div>
+          </div>
+        </div>
+
+        <!-- Top Items -->
+        <div class="terminal-card">
+          <div class="terminal-header">
+            <h3><i class="fa-solid fa-trophy text-accent"></i> Top Items by Revenue</h3>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Item / Skin</th>
+                  <th>Sold</th>
+                  <th>Revenue</th>
+                  <th>Spent</th>
+                  <th>Net Profit</th>
+                </tr>
+              </thead>
+              <tbody id="topItemsBody">
+                <tr><td colspan="5" style="text-align: center; padding: 20px;">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Recent Sales -->
+        <div class="terminal-card">
+          <div class="terminal-header">
+            <h3><i class="fa-solid fa-clock-rotate-left text-accent"></i> Recent Sales</h3>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Price</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="recentSalesBody">
+                <tr><td colspan="3" style="text-align: center; padding: 20px;">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: ACTIVE LISTINGS -->
       <section class="tab-content" id="tab-sales">
         <div class="terminal-card">
           <div class="terminal-header">
@@ -160,33 +247,44 @@
                 <tr>
                   <th>Item / Skin</th>
                   <th>Status</th>
-                  <th>Listing Price</th>
+                  <th>Our Price</th>
+                  <th>Market Min</th>
+                  <th>Gap</th>
                   <th>Min Floor</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="salesTableBody">
-                <tr><td colspan="5" style="text-align: center; padding: 20px;">Loading listings...</td></tr>
+                <tr><td colspan="7" style="text-align: center; padding: 20px;">Loading listings...</td></tr>
               </tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <!-- TAB 3: STEAM INVENTORY -->
+      <!-- TAB 4: STEAM INVENTORY -->
       <section class="tab-content" id="tab-inventory">
         <div class="terminal-card">
           <div class="terminal-header">
             <h3><i class="fa-solid fa-boxes-stacked text-accent"></i> Steam CS2 Inventory</h3>
-            <button class="btn btn-sm btn-secondary" id="btnRefreshInventory">
-              <i class="fa-solid fa-arrows-rotate"></i> Fetch Inventory
-            </button>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-primary" id="btnListAllInventory">
+                <i class="fa-solid fa-plus"></i> List All
+              </button>
+              <button class="btn btn-sm btn-secondary" id="btnForceRefreshInv">
+                <i class="fa-solid fa-rotate"></i> Sync Steam
+              </button>
+              <button class="btn btn-sm btn-secondary" id="btnRefreshInventory">
+                <i class="fa-solid fa-arrows-rotate"></i> Fetch Inventory
+              </button>
+            </div>
           </div>
           <div class="toolbar-strip">
             <div class="search-wrapper">
               <i class="fa-solid fa-magnifying-glass"></i>
               <input type="text" id="inventorySearchInput" class="search-input" placeholder="Filter inventory items...">
             </div>
+            <span class="text-dim" style="font-size: 11px;" id="inventoryCountLabel">0 items</span>
           </div>
           <div class="inventory-grid" id="inventoryGrid">
             <div class="empty-state">Click "Fetch Inventory" to view items.</div>
