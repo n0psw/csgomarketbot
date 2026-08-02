@@ -122,10 +122,10 @@ app.post('/api/listings/add', async (req, res) => {
     const { id, price, cur } = req.body;
     if (!id || !price) return res.status(400).json({ success: false, error: 'Missing item id or price' });
     
-    // Price in cents
-    const priceCents = Math.round(parseFloat(price) * 100);
-    const result = await bot.api.addToSale(id, priceCents, cur || bot.settings.currency);
-    bot.log('success', `Manually listed item ${id} for ${price} ${cur || bot.settings.currency}`);
+    const currency = cur || bot.settings.currency || 'USD';
+    const priceUnits = bot.api.getPriceUnits(price, currency);
+    const result = await bot.api.addToSale(id, priceUnits, currency);
+    bot.log('success', `Manually listed item ${id} for ${price} ${currency}`);
     res.json({ success: true, result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -138,9 +138,10 @@ app.post('/api/listings/set-price', async (req, res) => {
     const { id, price, cur } = req.body;
     if (!id || price === undefined) return res.status(400).json({ success: false, error: 'Missing item id or price' });
     
-    const priceCents = Math.round(parseFloat(price) * 100);
-    const result = await bot.api.setPrice(id, priceCents, cur || bot.settings.currency);
-    bot.log('info', `Set price for item ${id} to ${price} ${cur || bot.settings.currency}`);
+    const currency = cur || bot.settings.currency || 'USD';
+    const priceUnits = bot.api.getPriceUnits(price, currency);
+    const result = await bot.api.setPrice(id, priceUnits, currency);
+    bot.log('info', `Set price for item ${id} to ${price} ${currency}`);
     res.json({ success: true, result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -221,7 +222,13 @@ app.post('/api/listings/mass-set-price', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing items array' });
     }
 
-    const result = await bot.api.massSetPrice(items, cur || bot.settings.currency);
+    const currency = cur || bot.settings.currency || 'USD';
+    const itemsWithUnits = items.map(i => ({
+      id: i.id || i.item_id,
+      priceUnits: i.priceUnits !== undefined ? i.priceUnits : bot.api.getPriceUnits(i.price, currency)
+    }));
+
+    const result = await bot.api.massSetPrice(itemsWithUnits, currency);
     bot.log('info', `🏷️ Mass-repriced ${items.length} item(s) on Market.CSGO`);
     res.json({ success: true, result });
   } catch (err) {

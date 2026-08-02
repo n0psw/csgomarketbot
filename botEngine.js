@@ -209,14 +209,14 @@ class BotEngine {
         // Round to 2 decimals
         targetPrice = Math.round(targetPrice * 100) / 100;
 
-        // Convert to cents for API (10.50 USD -> 1050)
-        const targetPriceCents = Math.round(targetPrice * 100);
-        const currentPriceCents = Math.round(currentPriceFloat * 100);
+        // Convert to API units (RUB x100, USD/EUR x1000)
+        const targetPriceUnits = this.api.getPriceUnits(targetPrice, this.settings.currency);
+        const currentPriceUnits = this.api.getPriceUnits(currentPriceFloat, this.settings.currency);
 
-        // If target price is lower or higher than current listing price by > 1 cent
-        if (Math.abs(targetPriceCents - currentPriceCents) >= 1) {
+        // If target price differs from current price
+        if (Math.abs(targetPriceUnits - currentPriceUnits) >= 1) {
           try {
-            await this.api.setPrice(item.item_id || item.id, targetPriceCents, this.settings.currency);
+            await this.api.setPrice(item.item_id || item.id, targetPriceUnits, this.settings.currency);
             repricedItemsCount++;
             this.stats.repricesCount++;
             this.log('success', `🏷️ Repriced "${hashName}": ${currentPriceFloat} -> ${targetPrice} ${this.settings.currency} (Market min: ${lowestMarketPrice})`);

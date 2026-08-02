@@ -122,16 +122,28 @@ class MarketApi {
   }
 
   /**
+   * Helper to convert price float to API integer units based on currency.
+   * RUB: 1 RUB = 100 kopecks (x100)
+   * USD / EUR: 1 USD/EUR = 1000 units (x1000)
+   */
+  getPriceUnits(priceFloat, currency = this.currency) {
+    const cur = (currency || 'USD').toUpperCase();
+    const mult = (cur === 'USD' || cur === 'EUR') ? 1000 : 100;
+    return Math.round(parseFloat(priceFloat) * mult);
+  }
+
+  /**
    * 6. Change price of listed item (or delist if price = 0)
    * @param {string} itemCustomId - Market item listing ID or assetid
-   * @param {number} priceCents - New price in cents
+   * @param {number} priceUnits - New price in API units (kopecks for RUB, thousandths for USD/EUR)
    * @param {string} cur - USD, RUB, EUR
    */
-  async setPrice(itemCustomId, priceCents, cur = this.currency) {
+  async setPrice(itemCustomId, priceUnits, cur = this.currency) {
     return this.request('set-price', {
       id: itemCustomId,
-      price: Math.round(priceCents),
-      cur
+      item_id: itemCustomId,
+      price: Math.round(priceUnits),
+      cur: cur.toUpperCase()
     });
   }
 
@@ -225,16 +237,17 @@ class MarketApi {
 
   /**
    * 15. Mass set prices for multiple items at once
-   * @param {Array<{id: string, price: number, cur: string}>} items
+   * @param {Array<{id: string, priceUnits: number}>} items
    */
   async massSetPrice(items, cur = this.currency) {
-    // API expects: id=X&price=Y&cur=Z for each item, comma-separated
-    const ids = items.map(i => i.id).join(',');
-    const prices = items.map(i => Math.round(i.price)).join(',');
+    const itemsPayload = items.map(i => ({
+      item_id: i.id || i.item_id,
+      price: Math.round(i.priceUnits !== undefined ? i.priceUnits : i.price)
+    }));
+
     return this.request('mass-set-price', {
-      id: ids,
-      price: prices,
-      cur
+      items: JSON.stringify(itemsPayload),
+      cur: cur.toUpperCase()
     });
   }
 

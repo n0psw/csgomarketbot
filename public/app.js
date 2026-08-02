@@ -458,7 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (Math.abs(targetPrice - currentPriceFloat) >= 0.009) {
           itemsToUpdate.push({
             id: item.item_id || item.id,
-            price: Math.round(targetPrice * 100) // cents
+            price: targetPrice // human readable float (e.g. 3880.21)
           });
         }
       }
@@ -474,13 +474,17 @@ document.addEventListener('DOMContentLoaded', () => {
       btnMatchAllTop1.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
 
       try {
-        await fetch('/api/listings/mass-set-price', {
+        const res = await fetch('/api/listings/mass-set-price', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ items: itemsToUpdate })
         });
-        loadSales();
-        fetchStatus();
+        const data = await res.json();
+        if (data.success) {
+          setTimeout(() => { loadSales(); fetchStatus(); }, 800);
+        } else {
+          alert(`Error: ${data.error || 'Failed to update prices'}`);
+        }
       } catch (e) {
         alert(`Error: ${e.message}`);
       } finally {
@@ -500,7 +504,11 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({ id, price })
       });
       const data = await res.json();
-      if (data.success) loadSales(); else alert(`Error: ${data.error}`);
+      if (data.success) {
+        setTimeout(() => { loadSales(); fetchStatus(); }, 800);
+      } else {
+        alert(`Market API Error: ${data.error || 'Failed to set price'}`);
+      }
     } catch (e) { alert(`Failed: ${e.message}`); }
   }
 
