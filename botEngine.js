@@ -10,8 +10,8 @@ class BotEngine {
     this.isRunning = false;
     
     this.settings = {
-      apiKey: '',
-      currency: 'USD',
+      apiKey: process.env.MARKET_API_KEY || '',
+      currency: process.env.MARKET_CURRENCY || 'USD',
       undercutAmount: 0.01, // Undercut lowest price by 0.01 USD (1 cent)
       autoListNewItems: false,
       autoListDiscount: 0, // % discount off market price when auto-listing
