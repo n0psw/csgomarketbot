@@ -55,7 +55,7 @@ class MarketApi {
           ? item.endpoint
           : `${this.baseUrl}/${item.endpoint}`;
         
-        const queryParams = { ...item.params };
+        const queryParams = { v: '2', ...item.params };
         if (this.apiKey && !url.includes('prices/')) {
           queryParams.key = this.apiKey;
         }
@@ -68,7 +68,7 @@ class MarketApi {
         };
 
         if (item.method === 'POST') {
-          if (item.body) {
+          if (item.body && (typeof item.body === 'object' ? Object.keys(item.body).length > 0 : String(item.body).trim().length > 0)) {
             reqConfig.data = typeof item.body === 'string' ? item.body : JSON.stringify(item.body);
             reqConfig.headers = { 'Content-Type': 'application/json' };
           } else {
@@ -104,9 +104,40 @@ class MarketApi {
    */
   async pingNew(accessToken = '', proxy = '') {
     const body = {};
-    if (accessToken) body.access_token = accessToken;
-    if (proxy) body.proxy = proxy;
+    if (accessToken && accessToken.trim()) body.access_token = accessToken.trim();
+    if (proxy && proxy.trim()) body.proxy = proxy.trim();
     return this.request('ping-new', {}, 'POST', Object.keys(body).length > 0 ? body : null);
+  }
+
+  /**
+   * Auto-fetch Steam WebAPI access_token using steamLoginSecure cookie
+   * @param {string} steamLoginSecure - Value of steamLoginSecure cookie from browser
+   */
+  async fetchSteamAccessToken(steamLoginSecure) {
+    if (!steamLoginSecure) return null;
+    try {
+      const response = await axios.get('https://steamcommunity.com/pointssummary/ajaxgetasyncconfig', {
+        headers: {
+          'Cookie': `steamLoginSecure=${steamLoginSecure.trim()}`,
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        },
+        timeout: 10000
+      });
+
+      if (response.data && response.data.data && response.data.data.webapi_token) {
+        return response.data.data.webapi_token;
+      }
+    } catch (e) {
+      console.error('Failed to fetch Steam access_token from cookie:', e.message);
+    }
+    return null;
+  }
+
+  /**
+   * Register trade offer as ready on Market side (CS2 update requirement)
+   */
+  async tradeReady(tradeOfferId) {
+    return this.request('trade-ready', { tradeoffer_id: tradeOfferId }, 'POST');
   }
 
   /**

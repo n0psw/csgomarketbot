@@ -180,8 +180,10 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('summaryMinFloor').textContent = `$${data.settings.defaultMinPriceFloor || 0.05}`;
 
       const inputSteamAccessToken = document.getElementById('inputSteamAccessToken');
+      const inputSteamLoginSecure = document.getElementById('inputSteamLoginSecure');
       if (document.activeElement !== inputApiKey) inputApiKey.value = data.settings.apiKey || '';
       if (inputSteamAccessToken && document.activeElement !== inputSteamAccessToken) inputSteamAccessToken.value = data.settings.steamAccessToken || '';
+      if (inputSteamLoginSecure && document.activeElement !== inputSteamLoginSecure) inputSteamLoginSecure.value = data.settings.steamLoginSecure || '';
       if (document.activeElement !== selectCurrency) selectCurrency.value = data.settings.currency || 'USD';
       if (document.activeElement !== inputPingInterval) inputPingInterval.value = data.settings.pingIntervalSec || 120;
       if (document.activeElement !== inputRepriceInterval) inputRepriceInterval.value = data.settings.repriceIntervalSec || 30;
@@ -273,9 +275,11 @@ document.addEventListener('DOMContentLoaded', () => {
   settingsForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const inputSteamAccessToken = document.getElementById('inputSteamAccessToken');
+    const inputSteamLoginSecure = document.getElementById('inputSteamLoginSecure');
     const payload = {
       apiKey: inputApiKey.value.trim(),
       steamAccessToken: inputSteamAccessToken ? inputSteamAccessToken.value.trim() : '',
+      steamLoginSecure: inputSteamLoginSecure ? inputSteamLoginSecure.value.trim() : '',
       currency: selectCurrency.value,
       pingIntervalSec: parseInt(inputPingInterval.value) || 120,
       repriceIntervalSec: parseInt(inputRepriceInterval.value) || 30

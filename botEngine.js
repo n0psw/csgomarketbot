@@ -86,6 +86,14 @@ class BotEngine {
     this.settings = { ...this.settings, ...newSettings };
     this.api.setCredentials(this.settings.apiKey, this.settings.currency);
     this.saveData();
+
+    if (this.isRunning) {
+      if (this.pingTimer) clearInterval(this.pingTimer);
+      if (this.repriceTimer) clearInterval(this.repriceTimer);
+      this.pingTimer = setInterval(() => this.runPingCycle(), this.settings.pingIntervalSec * 1000);
+      this.repriceTimer = setInterval(() => this.runRepriceCycle(), (this.settings.repriceIntervalSec || 30) * 1000);
+    }
+
     this.log('info', 'Bot settings updated successfully.');
   }
 
@@ -124,7 +132,26 @@ class BotEngine {
   async runPingCycle() {
     if (!this.isRunning && this.stats.pingsCount > 0) return;
     try {
-      const res = await this.api.pingNew(this.settings.steamAccessToken || '');
+      // Auto-refresh access token from steamLoginSecure cookie if provided
+      if (this.settings.steamLoginSecure && (!this.settings.steamAccessToken || this.settings.autoRefreshToken)) {
+        const freshToken = await this.api.fetchSteamAccessToken(this.settings.steamLoginSecure);
+        if (freshToken) {
+          this.settings.steamAccessToken = freshToken;
+          this.saveData();
+          this.log('info', '🔑 Auto-refreshed Steam WebAPI Access Token via cookie!');
+        }
+      }
+
+      let res = await this.api.pingNew(this.settings.steamAccessToken || '');
+
+      // If token expired (invalid_access_token), clear token and retry without invalid token
+      if (res && res.message === 'invalid_access_token') {
+        this.log('warn', '⚠️ Steam Access Token expired. Retrying ping without token...');
+        this.settings.steamAccessToken = '';
+        this.saveData();
+        res = await this.api.pingNew('');
+      }
+
       if (res && (res.success || res.ping === 'pong' || res.ping === 'ok')) {
         this.stats.pingsCount++;
         this.stats.lastPingTime = new Date().toISOString();
@@ -134,7 +161,7 @@ class BotEngine {
         if (p2pActive) {
           this.log('success', `🟢 Heartbeat ping-new OK: P2P Sales Enabled! (online: true, p2p: true)`);
         } else {
-          this.log('warn', `🟡 Heartbeat ping-new OK (Online: true, P2P Sales: OFF). Tip: Set Steam Access Token in Settings or run MarketApp to enable P2P sales.`);
+          this.log('warn', `🟡 Heartbeat ping-new OK (Online: true, P2P Sales: OFF). Tip: Set Steam Cookie or Access Token in Settings to enable P2P sales.`);
         }
       } else {
         this.log('warn', `Ping warning response: ${JSON.stringify(res)}`);
