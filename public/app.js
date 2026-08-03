@@ -179,13 +179,17 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('summaryUndercut').textContent = `$${data.settings.undercutAmount || 0.01}`;
       document.getElementById('summaryMinFloor').textContent = `$${data.settings.defaultMinPriceFloor || 0.05}`;
 
+      const inputSteamAccessToken = document.getElementById('inputSteamAccessToken');
       if (document.activeElement !== inputApiKey) inputApiKey.value = data.settings.apiKey || '';
+      if (inputSteamAccessToken && document.activeElement !== inputSteamAccessToken) inputSteamAccessToken.value = data.settings.steamAccessToken || '';
       if (document.activeElement !== selectCurrency) selectCurrency.value = data.settings.currency || 'USD';
       if (document.activeElement !== inputPingInterval) inputPingInterval.value = data.settings.pingIntervalSec || 120;
-      if (document.activeElement !== inputRepriceInterval) inputRepriceInterval.value = data.settings.repriceIntervalSec || 180;
+      if (document.activeElement !== inputRepriceInterval) inputRepriceInterval.value = data.settings.repriceIntervalSec || 30;
       
       if (document.activeElement !== inputUndercut) inputUndercut.value = data.settings.undercutAmount || 0.01;
       if (document.activeElement !== inputDefaultMin) inputDefaultMin.value = data.settings.defaultMinPriceFloor || 0.05;
+      const checkEnableRepricer = document.getElementById('checkEnableRepricer');
+      if (checkEnableRepricer) checkEnableRepricer.checked = data.settings.enableRepricer !== false;
       if (checkAutoList) checkAutoList.checked = !!data.settings.autoListNewItems;
     }
 
@@ -268,11 +272,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   settingsForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const inputSteamAccessToken = document.getElementById('inputSteamAccessToken');
     const payload = {
       apiKey: inputApiKey.value.trim(),
+      steamAccessToken: inputSteamAccessToken ? inputSteamAccessToken.value.trim() : '',
       currency: selectCurrency.value,
       pingIntervalSec: parseInt(inputPingInterval.value) || 120,
-      repriceIntervalSec: parseInt(inputRepriceInterval.value) || 180
+      repriceIntervalSec: parseInt(inputRepriceInterval.value) || 30
     };
     try {
       const res = await fetch('/api/settings', {
@@ -287,7 +293,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   rulesForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const checkEnableRepricer = document.getElementById('checkEnableRepricer');
     const payload = {
+      enableRepricer: checkEnableRepricer ? checkEnableRepricer.checked : true,
       undercutAmount: parseFloat(inputUndercut.value) || 0.01,
       defaultMinPriceFloor: parseFloat(inputDefaultMin.value) || 0.05,
       autoListNewItems: checkAutoList ? checkAutoList.checked : false

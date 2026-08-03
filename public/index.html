@@ -314,6 +314,12 @@
                 </div>
               </div>
               <div class="form-group" style="margin-top: 14px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 700; color: var(--status-emerald);">
+                  <input type="checkbox" id="checkEnableRepricer" checked>
+                  <span>Enable Automated Repricer Engine (Automatic undercut scanning)</span>
+                </label>
+              </div>
+              <div class="form-group" style="margin-top: 8px;">
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                   <input type="checkbox" id="checkAutoList">
                   <span>Auto-list new items from Steam Inventory</span>
@@ -357,7 +363,11 @@
             <form id="settingsForm">
               <div class="form-group">
                 <label for="inputApiKey">Market.CSGO API Key</label>
-                <input type="password" id="inputApiKey" class="form-control" placeholder="Enter API secret key">
+                <input type="password" id="inputApiKey" class="form-control" placeholder="Enter Market API secret key">
+              </div>
+              <div class="form-group" style="margin-top: 14px;">
+                <label for="inputSteamAccessToken">Steam Access Token (Optional, for 24/7 P2P sales)</label>
+                <input type="password" id="inputSteamAccessToken" class="form-control" placeholder="Optional: eyAidHlw...">
               </div>
               <div class="form-grid" style="margin-top: 14px;">
                 <div class="form-group">

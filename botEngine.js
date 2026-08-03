@@ -12,6 +12,7 @@ class BotEngine {
     this.settings = {
       apiKey: process.env.MARKET_API_KEY || '',
       currency: process.env.MARKET_CURRENCY || 'USD',
+      enableRepricer: true, // Master switch for auto-repricing
       undercutAmount: 0.01, // Undercut lowest price by 0.01 USD (1 cent)
       autoListNewItems: false,
       autoListDiscount: 0, // % discount off market price when auto-listing
@@ -123,12 +124,18 @@ class BotEngine {
   async runPingCycle() {
     if (!this.isRunning && this.stats.pingsCount > 0) return;
     try {
-      const res = await this.api.pingNew();
-      if (res && (res.success || res.ping === 'ok')) {
+      const res = await this.api.pingNew(this.settings.steamAccessToken || '');
+      if (res && (res.success || res.ping === 'pong' || res.ping === 'ok')) {
         this.stats.pingsCount++;
         this.stats.lastPingTime = new Date().toISOString();
-        this.stats.p2pStatus = res.p2p ? 'Active (P2P OK)' : 'Disabled';
-        this.log('info', `Heartbeat ping-new OK. Online status maintained. (P2P: ${res.p2p ? 'Active' : 'Offline'})`);
+        const p2pActive = !!res.p2p;
+        this.stats.p2pStatus = p2pActive ? 'Sales ON (P2P Active)' : 'Online Only (P2P Off)';
+        
+        if (p2pActive) {
+          this.log('success', `🟢 Heartbeat ping-new OK: P2P Sales Enabled! (online: true, p2p: true)`);
+        } else {
+          this.log('warn', `🟡 Heartbeat ping-new OK (Online: true, P2P Sales: OFF). Tip: Set Steam Access Token in Settings or run MarketApp to enable P2P sales.`);
+        }
       } else {
         this.log('warn', `Ping warning response: ${JSON.stringify(res)}`);
       }
@@ -142,6 +149,10 @@ class BotEngine {
    */
   async runRepriceCycle() {
     if (!this.isRunning && this.stats.repricesCount > 0) return;
+    if (this.settings.enableRepricer === false) {
+      this.log('info', '⏸️ Auto-repricing is currently disabled in settings.');
+      return;
+    }
     this.log('info', '🔄 Starting auto-repricing scan...');
     try {
       // 1. Fetch user active listings

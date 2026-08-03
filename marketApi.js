@@ -25,13 +25,13 @@ class MarketApi {
   /**
    * Enforce rate limit (max 4 requests per second)
    */
-  async request(endpoint, params = {}, method = 'GET') {
+  async request(endpoint, params = {}, method = 'GET', body = null) {
     if (!this.apiKey && !endpoint.includes('prices/')) {
       throw new Error('API Key is missing. Please set your Market.CSGO API Key in Settings.');
     }
 
     return new Promise((resolve, reject) => {
-      this.requestQueue.push({ endpoint, params, method, resolve, reject });
+      this.requestQueue.push({ endpoint, params, method, body, resolve, reject });
       this.processQueue();
     });
   }
@@ -68,8 +68,13 @@ class MarketApi {
         };
 
         if (item.method === 'POST') {
-          reqConfig.data = item.body || '';
-          reqConfig.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+          if (item.body) {
+            reqConfig.data = typeof item.body === 'string' ? item.body : JSON.stringify(item.body);
+            reqConfig.headers = { 'Content-Type': 'application/json' };
+          } else {
+            reqConfig.data = '';
+            reqConfig.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+          }
         }
 
         const response = await axios(reqConfig);
@@ -95,9 +100,13 @@ class MarketApi {
 
   /**
    * 2. Ping engine - Keep 24/7 online status (Required every 2-3 min)
+   * Supports optional Steam WebAPI access_token and proxy
    */
-  async pingNew() {
-    return this.request('ping-new', {}, 'POST');
+  async pingNew(accessToken = '', proxy = '') {
+    const body = {};
+    if (accessToken) body.access_token = accessToken;
+    if (proxy) body.proxy = proxy;
+    return this.request('ping-new', {}, 'POST', Object.keys(body).length > 0 ? body : null);
   }
 
   /**
