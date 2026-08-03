@@ -63,11 +63,36 @@ document.addEventListener('DOMContentLoaded', () => {
   const profitChartContainer = document.getElementById('profitChartContainer');
   const chartEmptyState = document.getElementById('chartEmptyState');
 
+  // Account switcher DOM refs
+  const accountList = document.getElementById('accountList');
+  const btnAddAccount = document.getElementById('btnAddAccount');
+  const addAccountModalOverlay = document.getElementById('addAccountModalOverlay');
+  const addAccountModalCloseBtn = document.getElementById('addAccountModalCloseBtn');
+  const addAccountCancelBtn = document.getElementById('addAccountCancelBtn');
+  const addAccountSaveBtn = document.getElementById('addAccountSaveBtn');
+  const newAccountName = document.getElementById('newAccountName');
+  const newAccountApiKey = document.getElementById('newAccountApiKey');
+  const newAccountCurrency = document.getElementById('newAccountCurrency');
+
   let currentStatus = null;
   let rawSalesItems = [];
   let rawInventoryItems = [];
   let currentMarketPrices = {};
   let activeModalCallback = null;
+
+  // ─── Multi-account state ─────────────────────────────────
+  let currentAccountId = null; // set from first /api/accounts load
+  let allAccounts = [];        // latest account list from server
+
+  function acctParam() {
+    return currentAccountId ? `?account=${currentAccountId}` : '';
+  }
+
+  function acctBody() {
+    return currentAccountId ? { account: currentAccountId } : {};
+  }
+
+
 
   // Helper for CS2 item rarity colors
   function getItemRarityColor(name) {
@@ -138,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function fetchStatus() {
     try {
-      const res = await fetch('/api/status');
+      const res = await fetch(`/api/status${acctParam()}`);
       const data = await res.json();
       if (data.success) {
         currentStatus = data;
@@ -147,6 +172,142 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       console.error('Error fetching status:', e);
     }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // ACCOUNT SWITCHER
+  // ═══════════════════════════════════════════════════════
+
+  async function loadAccounts() {
+    try {
+      const res = await fetch('/api/accounts');
+      const data = await res.json();
+      if (!data.success) return;
+      allAccounts = data.accounts;
+
+      // Set default account on first load
+      if (!currentAccountId && allAccounts.length > 0) {
+        currentAccountId = allAccounts[0].id;
+      }
+
+      renderAccountList();
+    } catch (e) {
+      console.error('Error loading accounts:', e);
+    }
+  }
+
+  function renderAccountList() {
+    if (!accountList) return;
+    accountList.innerHTML = allAccounts.map(acct => {
+      const isActive = acct.id === currentAccountId;
+      const isRunning = acct.isRunning;
+      return `
+        <button class="account-item ${isActive ? 'active' : ''} ${isRunning ? 'running' : ''}" data-id="${acct.id}">
+          <span class="acct-dot"></span>
+          <span class="acct-name">${escapeHtml(acct.name)}</span>
+          <span class="acct-badge">ON</span>
+          ${allAccounts.length > 1 ? `<button class="acct-delete" data-id="${acct.id}" title="Remove account"><i class="fa-solid fa-xmark"></i></button>` : ''}
+        </button>
+      `;
+    }).join('');
+
+    // Click handlers — switch account
+    accountList.querySelectorAll('.account-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        // Don't switch if clicking delete button
+        if (e.target.closest('.acct-delete')) return;
+        const id = btn.getAttribute('data-id');
+        if (id !== currentAccountId) {
+          currentAccountId = id;
+          renderAccountList();
+          fetchStatus();
+          // Reset tab data when switching accounts
+          rawSalesItems = [];
+          rawInventoryItems = [];
+          currentMarketPrices = {};
+        }
+      });
+    });
+
+    // Delete handlers
+    accountList.querySelectorAll('.acct-delete').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        const acct = allAccounts.find(a => a.id === id);
+        if (!acct) return;
+        if (!confirm(`Remove account "${acct.name}"? This will delete its settings and data.`)) return;
+
+        try {
+          const res = await fetch(`/api/accounts/${id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            if (currentAccountId === id) {
+              const remaining = allAccounts.filter(a => a.id !== id);
+              currentAccountId = remaining.length > 0 ? remaining[0].id : null;
+            }
+            await loadAccounts();
+            fetchStatus();
+          } else {
+            alert(`Error: ${data.error}`);
+          }
+        } catch (err) {
+          alert(`Failed: ${err.message}`);
+        }
+      });
+    });
+  }
+
+  function openAddAccountModal() {
+    if (newAccountName) newAccountName.value = '';
+    if (newAccountApiKey) newAccountApiKey.value = '';
+    if (newAccountCurrency) newAccountCurrency.value = 'USD';
+    addAccountModalOverlay.classList.add('active');
+    if (newAccountName) newAccountName.focus();
+  }
+
+  function closeAddAccountModal() {
+    addAccountModalOverlay.classList.remove('active');
+  }
+
+  if (btnAddAccount) btnAddAccount.addEventListener('click', openAddAccountModal);
+  if (addAccountModalCloseBtn) addAccountModalCloseBtn.addEventListener('click', closeAddAccountModal);
+  if (addAccountCancelBtn) addAccountCancelBtn.addEventListener('click', closeAddAccountModal);
+
+  if (addAccountSaveBtn) {
+    addAccountSaveBtn.addEventListener('click', async () => {
+      const name = newAccountName ? newAccountName.value.trim() : '';
+      if (!name) { alert('Please enter an account name.'); return; }
+
+      addAccountSaveBtn.disabled = true;
+      addAccountSaveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating...';
+
+      try {
+        const res = await fetch('/api/accounts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            apiKey: newAccountApiKey ? newAccountApiKey.value.trim() : '',
+            currency: newAccountCurrency ? newAccountCurrency.value : 'USD'
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          currentAccountId = data.account.id;
+          closeAddAccountModal();
+          await loadAccounts();
+          fetchStatus();
+        } else {
+          alert(`Error: ${data.error}`);
+        }
+      } catch (err) {
+        alert(`Failed: ${err.message}`);
+      } finally {
+        addAccountSaveBtn.disabled = false;
+        addAccountSaveBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Create Account';
+      }
+    });
   }
 
   function updateUI(data) {
@@ -247,10 +408,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const isRunning = currentStatus && currentStatus.isRunning;
     const endpoint = isRunning ? '/api/bot/stop' : '/api/bot/start';
     try {
-      const res = await fetch(endpoint, { method: 'POST' });
+      const res = await fetch(endpoint + acctParam(), { method: 'POST' });
       const data = await res.json();
       if (!data.success) alert(`Failed: ${data.error}`);
       fetchStatus();
+      loadAccounts(); // refresh running status dots
     } catch (e) {
       alert(`Error: ${e.message}`);
     }
@@ -260,7 +422,7 @@ document.addEventListener('DOMContentLoaded', () => {
     repriceNowBtn.disabled = true;
     repriceNowBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Repricing...';
     try {
-      const res = await fetch('/api/bot/reprice-now', { method: 'POST' });
+      const res = await fetch('/api/bot/reprice-now' + acctParam(), { method: 'POST' });
       const data = await res.json();
       if (data.success) fetchStatus();
       else alert(`Error: ${data.error}`);
@@ -277,6 +439,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const inputSteamAccessToken = document.getElementById('inputSteamAccessToken');
     const inputSteamLoginSecure = document.getElementById('inputSteamLoginSecure');
     const payload = {
+      ...acctBody(),
       apiKey: inputApiKey.value.trim(),
       steamAccessToken: inputSteamAccessToken ? inputSteamAccessToken.value.trim() : '',
       steamLoginSecure: inputSteamLoginSecure ? inputSteamLoginSecure.value.trim() : '',
@@ -299,6 +462,7 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     const checkEnableRepricer = document.getElementById('checkEnableRepricer');
     const payload = {
+      ...acctBody(),
       enableRepricer: checkEnableRepricer ? checkEnableRepricer.checked : true,
       undercutAmount: parseFloat(inputUndercut.value) || 0.01,
       defaultMinPriceFloor: parseFloat(inputDefaultMin.value) || 0.05,
@@ -319,7 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnDelistAll.addEventListener('click', async () => {
       if (!confirm('Delist ALL items from sale?')) return;
       try {
-        const res = await fetch('/api/listings/remove-all', { method: 'POST' });
+        const res = await fetch('/api/listings/remove-all' + acctParam(), { method: 'POST' });
         const data = await res.json();
         if (data.success) { loadSales(); fetchStatus(); } else alert(`Error: ${data.error}`);
       } catch (e) { alert(`Failed: ${e.message}`); }
@@ -333,7 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadSales() {
     salesTableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;">Loading active sales...</td></tr>';
     try {
-      const res = await fetch('/api/listings');
+      const res = await fetch('/api/listings' + acctParam());
       const json = await res.json();
       if (!json.success || !json.data || !Array.isArray(json.data.items)) {
         salesTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">${json.error || 'No active listings.'}</td></tr>`;
@@ -489,7 +653,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await fetch('/api/listings/mass-set-price', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: itemsToUpdate })
+          body: JSON.stringify({ ...acctBody(), items: itemsToUpdate })
         });
         const data = await res.json();
         if (data.success) {
@@ -513,7 +677,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/listings/set-price', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, price })
+        body: JSON.stringify({ ...acctBody(), id, price })
       });
       const data = await res.json();
       if (data.success) {
@@ -536,7 +700,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadInventory() {
     inventoryGrid.innerHTML = '<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i> Loading inventory...</div>';
     try {
-      const res = await fetch('/api/inventory');
+      const res = await fetch('/api/inventory' + acctParam());
       const json = await res.json();
       if (!json.success || !json.data || !Array.isArray(json.data.items)) {
         inventoryGrid.innerHTML = `<div class="empty-state">${json.error || 'Inventory empty.'}</div>`;
@@ -592,7 +756,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/listings/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, price })
+        body: JSON.stringify({ ...acctBody(), id, price })
       });
       const data = await res.json();
       if (data.success) { loadInventory(); fetchStatus(); } else alert(`Error: ${data.error}`);
@@ -628,7 +792,7 @@ document.addEventListener('DOMContentLoaded', () => {
           await fetch('/api/listings/mass-add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: batch })
+            body: JSON.stringify({ ...acctBody(), items: batch })
           });
         }
         loadInventory();
@@ -648,7 +812,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnForceRefreshInv.disabled = true;
       btnForceRefreshInv.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Syncing...';
       try {
-        await fetch('/api/inventory/update', { method: 'POST' });
+        await fetch('/api/inventory/update' + acctParam(), { method: 'POST' });
         // Wait a moment then reload
         setTimeout(() => loadInventory(), 1500);
       } catch (e) {
@@ -668,7 +832,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function loadProfitStats(forceRefresh = false) {
     try {
-      const url = forceRefresh ? '/api/profit-stats?refresh=true' : '/api/profit-stats';
+      const baseParam = acctParam() ? acctParam() + (forceRefresh ? '&refresh=true' : '') : (forceRefresh ? '?refresh=true' : '');
+      const url = `/api/profit-stats${baseParam}`;
       const res = await fetch(url);
       const json = await res.json();
 
@@ -807,7 +972,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!p2pTradesList) return;
     p2pTradesList.innerHTML = '<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i> Checking trade offers...</div>';
     try {
-      const res = await fetch('/api/p2p-trades');
+      const res = await fetch('/api/p2p-trades' + acctParam());
       const json = await res.json();
       if (!json.success || !json.data || !Array.isArray(json.data.offers) || json.data.offers.length === 0) {
         p2pTradesList.innerHTML = '<div class="empty-state">No pending P2P trade requests right now.</div>';
@@ -836,6 +1001,10 @@ document.addEventListener('DOMContentLoaded', () => {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
+  loadAccounts();
   fetchStatus();
-  setInterval(fetchStatus, 4000);
+  setInterval(() => {
+    fetchStatus();
+    loadAccounts(); // keep running dots up to date
+  }, 4000);
 });

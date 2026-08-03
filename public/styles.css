@@ -824,3 +824,143 @@ html, body {
 /* MT spacing */
 .mt-3 { margin-top: 12px; }
 
+/* ═══════════════════════════════════════════════════════
+   ACCOUNT SWITCHER
+   ═══════════════════════════════════════════════════════ */
+
+.account-switcher {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 4px;
+}
+
+.account-switcher-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.btn-add-account {
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: var(--status-blue);
+  border-radius: var(--radius-sm);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 10px;
+}
+
+.btn-add-account:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: var(--status-blue);
+}
+
+.account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.account-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+  font-size: 12px;
+  font-weight: 500;
+  position: relative;
+  width: 100%;
+  text-align: left;
+}
+
+.account-item:hover {
+  background: var(--bg-card);
+  border-color: var(--border-color);
+  color: var(--text-main);
+}
+
+.account-item.active {
+  background: var(--bg-active);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: var(--text-main);
+}
+
+.account-item .acct-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+  transition: background 0.2s ease;
+}
+
+.account-item.running .acct-dot {
+  background: var(--status-emerald);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 4px rgba(16, 185, 129, 0.5); }
+  50% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.9); }
+}
+
+.account-item .acct-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-item .acct-badge {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  background: var(--status-emerald-bg);
+  color: var(--status-emerald);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 3px;
+  padding: 1px 4px;
+  display: none;
+}
+
+.account-item.running .acct-badge {
+  display: inline;
+}
+
+.account-item .acct-delete {
+  opacity: 0;
+  background: transparent;
+  border: none;
+  color: var(--status-rose);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: all 0.1s;
+  flex-shrink: 0;
+}
+
+.account-item:hover .acct-delete {
+  opacity: 1;
+}
+
+.account-item .acct-delete:hover {
+  background: var(--status-rose-bg);
+}

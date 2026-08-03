@@ -2,20 +2,124 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const bot = require('./botEngine');
+const accountManager = require('./accountManager');
 const ProfitTracker = require('./profitTracker');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const profitTracker = new ProfitTracker(bot.api);
+
+// ProfitTracker is per-account, created lazily
+const profitTrackers = new Map();
+
+function getProfitTracker(bot) {
+  if (!profitTrackers.has(bot.accountId)) {
+    profitTrackers.set(bot.accountId, new ProfitTracker(bot.api));
+  }
+  return profitTrackers.get(bot.accountId);
+}
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ═══════════════════════════════════════════════════════
+// ACCOUNT MANAGEMENT ROUTES
+// ═══════════════════════════════════════════════════════
+
+// List all accounts
+app.get('/api/accounts', (req, res) => {
+  try {
+    res.json({ success: true, accounts: accountManager.listAccounts() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Add a new account
+app.post('/api/accounts', (req, res) => {
+  try {
+    const { name, apiKey, currency } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'Account name is required' });
+    }
+    const account = accountManager.addAccount(name.trim(), apiKey || '', currency || 'USD');
+    res.json({ success: true, account });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Rename an account
+app.put('/api/accounts/:id', (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'New name is required' });
+    }
+    const ok = accountManager.renameAccount(req.params.id, name.trim());
+    if (!ok) return res.status(404).json({ success: false, error: 'Account not found' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete an account
+app.delete('/api/accounts/:id', (req, res) => {
+  try {
+    // Prevent deleting the last account
+    if (accountManager.accounts.size <= 1) {
+      return res.status(400).json({ success: false, error: 'Cannot delete the last account' });
+    }
+    const ok = accountManager.removeAccount(req.params.id);
+    if (!ok) return res.status(404).json({ success: false, error: 'Account not found' });
+    profitTrackers.delete(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Start bot for a specific account
+app.post('/api/accounts/:id/start', (req, res) => {
+  try {
+    const bot = accountManager.getAccount(req.params.id);
+    if (!bot) return res.status(404).json({ success: false, error: 'Account not found' });
+    bot.start();
+    res.json({ success: true, isRunning: bot.isRunning });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Stop bot for a specific account
+app.post('/api/accounts/:id/stop', (req, res) => {
+  try {
+    const bot = accountManager.getAccount(req.params.id);
+    if (!bot) return res.status(404).json({ success: false, error: 'Account not found' });
+    bot.stop();
+    res.json({ success: true, isRunning: bot.isRunning });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// HELPER — resolve bot from ?account= query or body.account
+// ═══════════════════════════════════════════════════════
+function getBot(req) {
+  const id = req.query.account || req.body?.account;
+  return accountManager.resolve(id);
+}
+
+// ═══════════════════════════════════════════════════════
+// EXISTING BOT ROUTES (all account-scoped via ?account=id)
+// ═══════════════════════════════════════════════════════
+
 // 1. Get bot status, statistics, balance, settings, and logs
 app.get('/api/status', async (req, res) => {
   try {
+    const bot = getBot(req);
     let balance = { success: false, RUB: 0, USD: 0, EUR: 0 };
     if (bot.settings.apiKey) {
       try {
@@ -35,6 +139,8 @@ app.get('/api/status', async (req, res) => {
     const status = bot.getStatus();
     res.json({
       success: true,
+      accountId: bot.accountId,
+      accountName: bot.accountName,
       balance,
       ...status
     });
@@ -46,6 +152,7 @@ app.get('/api/status', async (req, res) => {
 // 2. Start Bot 24/7 Daemon
 app.post('/api/bot/start', (req, res) => {
   try {
+    const bot = getBot(req);
     bot.start();
     res.json({ success: true, isRunning: bot.isRunning });
   } catch (err) {
@@ -56,6 +163,7 @@ app.post('/api/bot/start', (req, res) => {
 // 3. Stop Bot 24/7 Daemon
 app.post('/api/bot/stop', (req, res) => {
   try {
+    const bot = getBot(req);
     bot.stop();
     res.json({ success: true, isRunning: bot.isRunning });
   } catch (err) {
@@ -66,8 +174,8 @@ app.post('/api/bot/stop', (req, res) => {
 // 4. Update Settings
 app.post('/api/settings', (req, res) => {
   try {
+    const bot = getBot(req);
     bot.updateSettings(req.body);
-    // Update profitTracker's API reference too
     res.json({ success: true, settings: bot.settings });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
@@ -77,6 +185,7 @@ app.post('/api/settings', (req, res) => {
 // 5. Trigger manual re-pricing run
 app.post('/api/bot/reprice-now', async (req, res) => {
   try {
+    const bot = getBot(req);
     await bot.runRepriceCycle();
     res.json({ success: true, message: 'Reprice cycle completed' });
   } catch (err) {
@@ -87,6 +196,7 @@ app.post('/api/bot/reprice-now', async (req, res) => {
 // 6. Get user Steam inventory
 app.get('/api/inventory', async (req, res) => {
   try {
+    const bot = getBot(req);
     const data = await bot.api.getMyInventory();
     res.json({ success: true, data });
   } catch (err) {
@@ -97,9 +207,9 @@ app.get('/api/inventory', async (req, res) => {
 // 7. Get user active market listings (enhanced with market prices)
 app.get('/api/listings', async (req, res) => {
   try {
+    const bot = getBot(req);
     const data = await bot.api.getItems();
 
-    // Optionally enrich with market prices for competitive analysis
     let marketPrices = {};
     try {
       const pricesRes = await bot.api.getMarketPrices(bot.settings.currency);
@@ -123,6 +233,7 @@ app.get('/api/listings', async (req, res) => {
 // 8. Add item to sale
 app.post('/api/listings/add', async (req, res) => {
   try {
+    const bot = getBot(req);
     const { id, price, cur } = req.body;
     if (!id || !price) return res.status(400).json({ success: false, error: 'Missing item id or price' });
     
@@ -139,6 +250,7 @@ app.post('/api/listings/add', async (req, res) => {
 // 9. Update listing price or delist item
 app.post('/api/listings/set-price', async (req, res) => {
   try {
+    const bot = getBot(req);
     const { id, price, cur } = req.body;
     if (!id || price === undefined) return res.status(400).json({ success: false, error: 'Missing item id or price' });
     
@@ -155,6 +267,7 @@ app.post('/api/listings/set-price', async (req, res) => {
 // 10. Delist all items from sale
 app.post('/api/listings/remove-all', async (req, res) => {
   try {
+    const bot = getBot(req);
     const result = await bot.api.removeAllFromSale();
     bot.log('warn', 'Delisted all items from sale on Market.CSGO');
     res.json({ success: true, result });
@@ -166,6 +279,7 @@ app.post('/api/listings/remove-all', async (req, res) => {
 // 11. Fetch pending P2P trade requests for sold items
 app.get('/api/p2p-trades', async (req, res) => {
   try {
+    const bot = getBot(req);
     const data = await bot.api.getTradeRequestGiveP2PAll();
     res.json({ success: true, data });
   } catch (err) {
@@ -173,13 +287,10 @@ app.get('/api/p2p-trades', async (req, res) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════
-// NEW ROUTES: Analytics, History, Mass Operations
-// ═══════════════════════════════════════════════════════
-
 // 12. Get trade history
 app.get('/api/history', async (req, res) => {
   try {
+    const bot = getBot(req);
     const { from, to } = req.query;
     const data = await bot.api.getHistory(from, to);
     res.json({ success: true, data });
@@ -191,6 +302,10 @@ app.get('/api/history', async (req, res) => {
 // 13. Get profit statistics (computed from history)
 app.get('/api/profit-stats', async (req, res) => {
   try {
+    const bot = getBot(req);
+    const profitTracker = getProfitTracker(bot);
+    // Update profitTracker API reference in case it changed
+    profitTracker.api = bot.api;
     const forceRefresh = req.query.refresh === 'true';
     const stats = await profitTracker.getStats(forceRefresh);
     res.json({ success: true, stats });
@@ -202,6 +317,7 @@ app.get('/api/profit-stats', async (req, res) => {
 // 14. Mass add items to sale (up to 50)
 app.post('/api/listings/mass-add', async (req, res) => {
   try {
+    const bot = getBot(req);
     const { items, cur } = req.body;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, error: 'Missing items array' });
@@ -221,6 +337,7 @@ app.post('/api/listings/mass-add', async (req, res) => {
 // 15. Mass set prices (with automatic single-item fallback)
 app.post('/api/listings/mass-set-price', async (req, res) => {
   try {
+    const bot = getBot(req);
     const { items, cur } = req.body;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, error: 'Missing items array' });
@@ -245,7 +362,6 @@ app.post('/api/listings/mass-set-price', async (req, res) => {
       // Mass set price failed, falling back to single items
     }
 
-    // If mass-set-price endpoint failed or returned success: false, fallback to sequential setPrice
     if (!massSuccess) {
       let successCount = 0;
       for (const item of itemsWithUnits) {
@@ -270,6 +386,7 @@ app.post('/api/listings/mass-set-price', async (req, res) => {
 // 16. Search market by item name (competitive monitoring)
 app.get('/api/market-search/:name', async (req, res) => {
   try {
+    const bot = getBot(req);
     const hashName = decodeURIComponent(req.params.name);
     const data = await bot.api.searchItemByHashName(hashName);
     res.json({ success: true, data });
@@ -281,6 +398,7 @@ app.get('/api/market-search/:name', async (req, res) => {
 // 17. Force refresh Steam inventory on market side
 app.post('/api/inventory/update', async (req, res) => {
   try {
+    const bot = getBot(req);
     const result = await bot.api.updateInventory();
     bot.log('info', '🔄 Forced Steam inventory refresh on Market.CSGO');
     res.json({ success: true, result });
@@ -292,6 +410,7 @@ app.post('/api/inventory/update', async (req, res) => {
 // 18. Get operation history (full: buys, sells, deposits, withdrawals)
 app.get('/api/operation-history', async (req, res) => {
   try {
+    const bot = getBot(req);
     const { from, to } = req.query;
     const data = await bot.api.getOperationHistory(from, to);
     res.json({ success: true, data });
@@ -304,6 +423,6 @@ app.listen(PORT, () => {
   console.log(`=================================================`);
   console.log(`🚀 Market.CSGO 24/7 Trading Bot Web UI is Live!`);
   console.log(`🌐 Open in Browser: http://localhost:${PORT}`);
+  console.log(`📁 Accounts loaded: ${accountManager.accounts.size}`);
   console.log(`=================================================`);
 });
-

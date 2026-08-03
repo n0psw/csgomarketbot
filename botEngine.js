@@ -2,24 +2,32 @@ const fs = require('fs');
 const path = require('path');
 const MarketApi = require('./marketApi');
 
-const DATA_FILE = path.join(__dirname, 'data.json');
-
 class BotEngine {
-  constructor() {
+  /**
+   * @param {string} accountId - Unique identifier for this account
+   * @param {string} accountName - Human-readable account name
+   * @param {object} initialSettings - Optional initial settings to pre-populate
+   */
+  constructor(accountId = 'default', accountName = 'Account', initialSettings = {}) {
+    this.accountId = accountId;
+    this.accountName = accountName;
+    this.dataFile = path.join(__dirname, `data-${accountId}.json`);
+
     this.api = new MarketApi();
     this.isRunning = false;
     
     this.settings = {
-      apiKey: process.env.MARKET_API_KEY || '',
-      currency: process.env.MARKET_CURRENCY || 'USD',
-      enableRepricer: true, // Master switch for auto-repricing
-      undercutAmount: 0.01, // Undercut lowest price by 0.01 USD (1 cent)
+      apiKey: '',
+      currency: 'USD',
+      enableRepricer: true,
+      undercutAmount: 0.01,
       autoListNewItems: false,
-      autoListDiscount: 0, // % discount off market price when auto-listing
-      defaultMinPriceFloor: 0.05, // Minimum safety floor in USD
-      minPrices: {}, // Custom min price per market_hash_name { "AK-47 | Redline (FT)": 10.00 }
-      pingIntervalSec: 120, // 2 minutes
-      repriceIntervalSec: 30, // 30 seconds (быстрое перебивание цен)
+      autoListDiscount: 0,
+      defaultMinPriceFloor: 0.05,
+      minPrices: {},
+      pingIntervalSec: 120,
+      repriceIntervalSec: 30,
+      ...initialSettings
     };
 
     this.stats = {
@@ -43,15 +51,15 @@ class BotEngine {
 
   loadData() {
     try {
-      if (fs.existsSync(DATA_FILE)) {
-        const raw = fs.readFileSync(DATA_FILE, 'utf8');
+      if (fs.existsSync(this.dataFile)) {
+        const raw = fs.readFileSync(this.dataFile, 'utf8');
         const data = JSON.parse(raw);
         if (data.settings) this.settings = { ...this.settings, ...data.settings };
         if (data.stats) this.stats = { ...this.stats, ...data.stats };
         if (data.logs) this.logs = data.logs.slice(-200); // Keep last 200 logs
       }
     } catch (e) {
-      console.error('Error loading data.json:', e.message);
+      console.error(`[${this.accountId}] Error loading data file:`, e.message);
     }
   }
 
@@ -62,9 +70,9 @@ class BotEngine {
         stats: this.stats,
         logs: this.logs.slice(-200)
       };
-      fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+      fs.writeFileSync(this.dataFile, JSON.stringify(data, null, 2), 'utf8');
     } catch (e) {
-      console.error('Error saving data.json:', e.message);
+      console.error(`[${this.accountId}] Error saving data file:`, e.message);
     }
   }
 
@@ -77,7 +85,7 @@ class BotEngine {
     };
     this.logs.unshift(entry);
     if (this.logs.length > 200) this.logs.pop();
-    console.log(`[${type.toUpperCase()}] ${entry.message}`);
+    console.log(`[${this.accountName}] [${type.toUpperCase()}] ${entry.message}`);
     this.saveData();
     return entry;
   }
@@ -354,4 +362,4 @@ class BotEngine {
   }
 }
 
-module.exports = new BotEngine();
+module.exports = BotEngine;

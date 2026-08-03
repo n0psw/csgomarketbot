@@ -22,6 +22,19 @@
         </div>
       </div>
 
+      <!-- Account Switcher -->
+      <div class="account-switcher">
+        <div class="account-switcher-header">
+          <span>ACCOUNTS</span>
+          <button class="btn-add-account" id="btnAddAccount" title="Add new account">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+        </div>
+        <div class="account-list" id="accountList">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
       <!-- Bot Controls -->
       <div class="bot-control-widget">
         <div class="widget-header">
@@ -414,6 +427,37 @@
       <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
         <button class="btn btn-secondary" id="modalCancelBtn">Cancel</button>
         <button class="btn btn-primary" id="modalSaveBtn">Save Price</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Account Modal -->
+  <div class="modal-overlay" id="addAccountModalOverlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h4>Add New Account</h4>
+        <button class="modal-close" id="addAccountModalCloseBtn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px;">Each account runs its own independent 24/7 bot daemon with separate settings and logs.</p>
+      <div class="form-group">
+        <label for="newAccountName">Account Name</label>
+        <input type="text" id="newAccountName" class="form-control" placeholder="e.g. Main Account, Alt #2...">
+      </div>
+      <div class="form-group" style="margin-top: 12px;">
+        <label for="newAccountApiKey">API Key (optional, set later in Settings)</label>
+        <input type="password" id="newAccountApiKey" class="form-control" placeholder="Market.CSGO API Key">
+      </div>
+      <div class="form-group" style="margin-top: 12px;">
+        <label for="newAccountCurrency">Currency</label>
+        <select id="newAccountCurrency" class="form-control">
+          <option value="USD">USD ($)</option>
+          <option value="RUB">RUB (₽)</option>
+          <option value="EUR">EUR (€)</option>
+        </select>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button class="btn btn-secondary" id="addAccountCancelBtn">Cancel</button>
+        <button class="btn btn-primary" id="addAccountSaveBtn"><i class="fa-solid fa-plus"></i> Create Account</button>
       </div>
     </div>
   </div>
